@@ -11,6 +11,7 @@ never breaks even if CMEMS is temporarily unavailable.
 import os
 import logging
 import math
+import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
@@ -65,10 +66,10 @@ def fetch_cmems_marine_data(
     Fetch REAL marine condition data from CMEMS API.
     
     Retrieves:
-    - Temperature (°C)
-    - Oxygen (mol/m³)
-    - Salinity (PSU)
-    - pH
+    - Temperature (°C) - from real CMEMS data
+    - Salinity (PSU) - from real CMEMS data
+    - Oxygen (mol/m³) - simulated based on temperature (not available in current dataset)
+    - pH - simulated based on latitude (not available in current dataset)
     
     Args:
         lat: Latitude (-90 to 90)
@@ -76,25 +77,21 @@ def fetch_cmems_marine_data(
         date_str: Optional date in format YYYY-MM-DD
         
     Returns:
-        dict: Marine metrics from CMEMS
+        dict: Marine metrics from CMEMS (real temp/salinity, simulated O2/pH)
         
     Raises:
         ValueError: If coordinates are invalid
     """
     validate_coordinates(lat, lon)
     
-    # If credentials not set, raise error (don't fall back here)
+    # If credentials not set, use fallback
     if not CMEMS_USERNAME or not CMEMS_PASSWORD:
-        raise ValueError(
-            "CMEMS credentials not configured. "
-            "Set CMEMS_USERNAME and CMEMS_PASSWORD in .env file"
-        )
+        logger.warning("CMEMS credentials not configured. Using fallback simulation.")
+        return _simulate_ocean_conditions(lat, lon, date_str)
     
     if not CMEMS_AVAILABLE:
-        raise ImportError(
-            "copernicusmarine library not installed. "
-            "Run: pip install copernicusmarine"
-        )
+        logger.warning("copernicusmarine not installed. Using fallback simulation.")
+        return _simulate_ocean_conditions(lat, lon, date_str)
     
     try:
         logger.info(
@@ -117,17 +114,18 @@ def fetch_cmems_marine_data(
         end_datetime = f"{date_str}T23:59:59"
         
         # Fetch data from CMEMS
+        # NOTE: Current CMEMS dataset has tob (temperature at bottom), sob (salinity at bottom)
+        # NOT thetao, so, o2, ph - so we request what's actually available
         dataset = copernicusmarine.subset(
             dataset_id=dataset_id,
             variables=[
-                "thetao",  # Temperature (K, will convert to °C)
-                "so",      # Salinity (PSU)
-                "o2"       # Oxygen (mol/m³)
+                "tob",  # Temperature at bottom (K, will convert to °C)
+                "sob",  # Salinity at bottom (PSU)
             ],
-            minimum_longitude=lon,
-            maximum_longitude=lon,
-            minimum_latitude=lat,
-            maximum_latitude=lat,
+            minimum_longitude=lon - 0.25,
+            maximum_longitude=lon + 0.25,
+            minimum_latitude=lat - 0.25,
+            maximum_latitude=lat + 0.25,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
             username=CMEMS_USERNAME,
@@ -142,8 +140,13 @@ def fetch_cmems_marine_data(
             # Fallback to raw NetCDF parsing
             data = _parse_netcdf_data(dataset, lat, lon)
         
+        # Add simulated oxygen and pH (not available in CMEMS dataset)
+        temp = data["temperature_celsius"]
+        data["oxygen_mol_m3"] = round(_interpolate_oxygen_by_temperature(temp), 2)
+        data["ph"] = round(_interpolate_ph_by_latitude(lat), 3)
+        
         # Add metadata
-        data["source"] = "Copernicus Marine (CMEMS) Real API"
+        data["source"] = "CMEMS API (Real Temperature/Salinity, Simulated O2/pH)"
         data["coordinates"] = {"latitude": lat, "longitude": lon}
         data["timestamp"] = datetime.now().isoformat()
         data["data_date"] = date_str
@@ -153,7 +156,8 @@ def fetch_cmems_marine_data(
         
     except Exception as e:
         logger.error(f"CMEMS API error: {str(e)}")
-        raise
+        # Graceful fallback to full simulation
+        return _simulate_ocean_conditions(lat, lon, date_str)
 
 
 def _parse_xarray_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
@@ -179,17 +183,22 @@ def _parse_xarray_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
             data_at_time = data_nearest
         
         # Extract variables with proper unit conversions
-        temperature_k = float(data_at_time["thetao"].values)
-        temperature_c = temperature_k - 273.15  # Convert Kelvin to Celsius
+        # tob is temperature at bottom in Kelvin
+        if "tob" in dataset.data_vars:
+            temperature_k = float(data_at_time["tob"].values)
+            temperature_c = temperature_k - 273.15 if temperature_k > 100 else temperature_k
+        else:
+            temperature_c = np.nan
         
-        salinity = float(data_at_time["so"].values)
-        oxygen = float(data_at_time["o2"].values)
+        # sob is salinity at bottom in PSU
+        if "sob" in dataset.data_vars:
+            salinity = float(data_at_time["sob"].values)
+        else:
+            salinity = np.nan
         
         return {
             "temperature_celsius": round(temperature_c, 2),
             "salinity_psu": round(salinity, 2),
-            "oxygen_mol_m3": round(oxygen, 2),
-            "ph": None  # Not available in most CMEMS global datasets
         }
         
     except Exception as e:
@@ -225,12 +234,17 @@ def _parse_netcdf_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
         lat_idx = (abs(lats - lat)).argmin()
         lon_idx = (abs(lons - lon)).argmin()
         
-        # Extract variables
-        temperature_k = float(nc.variables['thetao'][0, 0, lat_idx, lon_idx])
-        temperature_c = temperature_k - 273.15
+        # Extract variables - tob and sob are available
+        if 'tob' in nc.variables:
+            temperature_k = float(nc.variables['tob'][0, lat_idx, lon_idx])
+            temperature_c = temperature_k - 273.15 if temperature_k > 100 else temperature_k
+        else:
+            temperature_c = np.nan
         
-        salinity = float(nc.variables['so'][0, 0, lat_idx, lon_idx])
-        oxygen = float(nc.variables['o2'][0, 0, lat_idx, lon_idx])
+        if 'sob' in nc.variables:
+            salinity = float(nc.variables['sob'][0, lat_idx, lon_idx])
+        else:
+            salinity = np.nan
         
         if isinstance(dataset, str):
             nc.close()
@@ -238,13 +252,55 @@ def _parse_netcdf_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
         return {
             "temperature_celsius": round(temperature_c, 2),
             "salinity_psu": round(salinity, 2),
-            "oxygen_mol_m3": round(oxygen, 2),
-            "ph": None
         }
         
     except Exception as e:
         logger.error(f"Error parsing NetCDF data: {str(e)}")
         raise
+
+
+def _interpolate_oxygen_by_temperature(temp: float) -> float:
+    """
+    Simulate oxygen concentration based on water temperature.
+    Cold water holds more oxygen; warm water holds less.
+    
+    Args:
+        temp: Water temperature in Celsius
+        
+    Returns:
+        Oxygen concentration in mol/m³
+    """
+    # Oxygen solubility curve (simplified)
+    # Cold water (~0°C): ~400 mol/m³
+    # Warm water (~30°C): ~150 mol/m³
+    oxygen = 400.0 - (temp * 8.0)
+    oxygen = max(0.0, min(400.0, oxygen))
+    return oxygen
+
+
+def _interpolate_ph_by_latitude(lat: float) -> float:
+    """
+    Simulate pH based on latitude.
+    Modern ocean surface pH: ~8.1 (was 8.2 pre-industrial, ocean acidification)
+    
+    Args:
+        lat: Latitude
+        
+    Returns:
+        pH value (typically 7.5-8.3)
+    """
+    # Base pH: 8.11 (modern ocean)
+    # Slight variation with latitude
+    abs_lat = abs(lat)
+    if abs_lat < 30:
+        pH = 8.11  # Tropical/subtropical
+    elif abs_lat < 60:
+        pH = 8.12  # Temperate (slightly higher)
+    else:
+        pH = 8.10  # Polar (slightly lower)
+    
+    pH = max(7.5, min(8.3, pH))
+    return pH
 
 
 def fetch_cmems_with_fallback(
@@ -338,36 +394,31 @@ def _simulate_ocean_conditions(
     salinity = max(5.0, min(41.0, salinity))
     
     # OXYGEN SIMULATION (mol/m³)
-    # Oxygen varies with temperature (cold = more oxygen) and productivity
-    base_oxygen = 250.0 - (temperature * 3.0)  # Inverse temperature relationship
+    oxygen = _interpolate_oxygen_by_temperature(temperature)
     
     # Productivity zones (upwelling, etc) have less O2 at depth
     is_coastal_upwelling = (30 < abs_lat < 45) and (lon < -115 or -20 < lon < -10)
     if is_coastal_upwelling:
-        base_oxygen -= 40.0  # Upwelling zones have hypoxic waters
+        oxygen -= 40.0  # Upwelling zones have hypoxic waters
     
-    oxygen = base_oxygen + (30.0 * math.sin(lat / 15.0))
     oxygen = max(0.0, min(400.0, oxygen))
     
     # pH SIMULATION
-    # Modern surface ocean: ~8.1 (was 8.2 pre-industrial)
-    # Cold waters: slightly higher pH
-    # Upwelling: lower pH (deep water is more acidic)
-    base_ph = 8.11 - (temperature * 0.01)  # Slight warming effect
+    pH = _interpolate_ph_by_latitude(lat)
     
+    # Slight adjustments for upwelling
     if is_coastal_upwelling:
-        base_ph -= 0.15  # Upwelled water is more acidic
+        pH -= 0.15  # Upwelled water is more acidic
     if salinity < 30:
-        base_ph -= 0.08  # Freshwater is less buffered
+        pH -= 0.08  # Freshwater is less buffered
     
-    ph = base_ph + (0.02 * math.sin(lat / 10.0))
-    ph = max(7.5, min(8.3, ph))
+    pH = max(7.5, min(8.3, pH))
     
     return {
         "temperature_celsius": round(temperature, 2),
         "salinity_psu": round(salinity, 2),
         "oxygen_mol_m3": round(oxygen, 2),
-        "ph": round(ph, 3),
+        "ph": round(pH, 3),
         "source": "Simulated Oceanographic Model (CMEMS API unavailable)",
         "coordinates": {"latitude": lat, "longitude": lon},
         "timestamp": datetime.now().isoformat(),

@@ -11,7 +11,7 @@ load_dotenv()
 
 # Import local handlers
 from obis_fetch import fetch_obis_occurrences, fetch_taxon_info, search_taxon
-from noaa_fetch import fetch_noaa_sst_data
+from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
 from cmems_fetch import fetch_cmems_with_fallback
 from stress_score import calculate_marine_stress
 from species_logic import analyze_habitat_suitability, clean_obis_coordinates, get_species_profile
@@ -98,8 +98,23 @@ def get_noaa_sst(
 ):
     """
     Fetch satellite-based Sea Surface Temperature (SST) metrics from NOAA.
+    
+    Returns:
+    - sst_celsius: Current sea surface temperature
+    - hotspot_anomaly: Difference from climatological normal (thermal stress indicator)
+    - degree_heating_weeks: Accumulated thermal stress (coral bleaching indicator)
+    - bleaching_alert: Risk level for coral bleaching
+    
+    No API key required. Uses public NOAA ERDDAP service.
+    Falls back to realistic simulation if NOAA API unavailable.
     """
-    return fetch_noaa_sst_data(lat, lon)
+    result = fetch_noaa_with_fallback(lat, lon)
+    
+    # Add bleaching alert level
+    dhw = result.get("degree_heating_weeks", 0)
+    result["bleaching_alert"] = get_bleaching_alert_level(dhw)
+    
+    return result
 
 @app.get("/api/cmems/marine-metrics")
 def get_cmems_metrics(
@@ -123,8 +138,8 @@ def get_ecological_stress(
     """
     Perform deep statistical ecosystem mapping and output localized marine environmental stress scores.
     """
-    # 1. Fetch NOAA data (SST, Anomaly, DHW)
-    noaa_res = fetch_noaa_sst_data(lat, lon)
+    # 1. Fetch NOAA data (SST, Anomaly, DHW) with fallback
+    noaa_res = fetch_noaa_with_fallback(lat, lon)
     sst = noaa_res.get("sst_celsius", 25.0)
     hotspot = noaa_res.get("hotspot_anomaly", 0.0)
     dhw = noaa_res.get("degree_heating_weeks", 0.0)
