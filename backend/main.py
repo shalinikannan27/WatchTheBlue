@@ -10,11 +10,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import local handlers
-from obis_fetch import fetch_obis_occurrences, fetch_taxon_info, search_taxon
+from obis_fetch import get_species_by_location
 from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
 from cmems_fetch import fetch_cmems_with_fallback
 from stress_score import calculate_marine_stress
-from species_logic import analyze_habitat_suitability, clean_obis_coordinates, get_species_profile
 
 app = FastAPI(
     title="WatchTheBlue API Backend",
@@ -57,39 +56,6 @@ def home():
     Root directory metadata
     """
     return {"message": "OceanPulse Backend Running"}
-
-@app.get("/api/obis/occurrences")
-def get_obis_occurrences(
-    scientific_name: Optional[str] = Query(None, description="Scientific name of species to fetch"),
-    taxon_id: Optional[int] = Query(None, description="AphiaID/taxonid of species"),
-    geometry: Optional[str] = Query(None, description="WKT boundary spatial polygon"),
-    size: int = Query(100, ge=1, le=1000, description="Max records to return")
-):
-    """
-    Retrieve geolocated species records from the OBIS database.
-    """
-    if not scientific_name and not taxon_id:
-        raise HTTPException(status_code=400, detail="Please provide either 'scientific_name' or 'taxon_id'")
-        
-    raw_data = fetch_obis_occurrences(
-        scientific_name=scientific_name,
-        taxon_id=taxon_id,
-        geometry=geometry,
-        size=size
-    )
-    
-    clean_records = clean_obis_coordinates(raw_data)
-    
-    return {
-        "query": {
-            "scientific_name": scientific_name,
-            "taxon_id": taxon_id,
-            "size": size
-        },
-        "count_returned": len(clean_records),
-        "count_total_raw": raw_data.get("count", 0),
-        "results": clean_records
-    }
 
 @app.get("/api/noaa/sst")
 def get_noaa_sst(
@@ -180,28 +146,40 @@ def get_ecological_stress(
 
 @app.get("/api/species/habitat-suitability")
 def get_habitat_suitability(
-    scientific_name: str = Query(..., description="Scientific name of species to evaluate"),
     lat: float = Query(..., ge=-90.0, le=90.0),
     lon: float = Query(..., ge=-180.0, le=180.0)
 ):
     """
-    Assess species habitat sustainability under current environmental metrics at a coordinate.
+    Assess species habitat suitability and occurrence data under current environmental metrics at a coordinate.
+    
+    Returns:
+    - Environmental metrics (SST, pH, Salinity) from NOAA and CMEMS
+    - Species occurrence data from OBIS showing what lives in this area
+    - Habitat suitability analysis based on species-environment interaction
     """
     # Fetch ambient environment
-    noaa_res = fetch_noaa_sst_data(lat, lon)
+    noaa_res = fetch_noaa_with_fallback(lat, lon)
     cmems_res = fetch_cmems_with_fallback(lat, lon)
     
     current_env = {
         "sst_celsius": noaa_res.get("sst_celsius"),
+        "hotspot_anomaly": noaa_res.get("hotspot_anomaly"),
+        "degree_heating_weeks": noaa_res.get("degree_heating_weeks"),
+        "bleaching_alert": get_bleaching_alert_level(noaa_res.get("degree_heating_weeks", 0)),
         "ph": cmems_res.get("ph"),
-        "salinity_psu": cmems_res.get("salinity_psu")
+        "salinity_psu": cmems_res.get("salinity_psu"),
+        "chlorophyll_mg_m3": cmems_res.get("chlorophyll_mg_m3")
     }
     
-    analysis = analyze_habitat_suitability(scientific_name, current_env)
+    # Fetch species occurrence data from OBIS
+    species_data = get_species_by_location(lat, lon)
+    
     return {
         "coordinates": {"latitude": lat, "longitude": lon},
         "environmental_metrics": current_env,
-        "suitability_analysis": analysis
+        "species_occurrences": species_data.get("occurrences", []),
+        "species_count": species_data.get("count", 0),
+        "data_source": species_data.get("source", "OBIS API")
     }
 
 if __name__ == "__main__":
