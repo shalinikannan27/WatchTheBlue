@@ -32,7 +32,7 @@ def fetch_obis_occurrences(
         dict: The response JSON with occurrence records, or error details.
     """
     url = f"{OBIS_API_BASE}/occurrence"
-    params = {}
+    params: dict[str, Any] = {}
     
     if scientific_name:
         params["scientificname"] = scientific_name
