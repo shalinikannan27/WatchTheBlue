@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>WatchTheBlue | Cinematic Marine Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Hanken+Grotesk:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-surface": "#cbe6ff",
+                        "tertiary": "#b5ffeb",
+                        "on-primary-fixed-variant": "#004f57",
+                        "tertiary-container": "#20eecc",
+                        "outline": "#849396",
+                        "error": "#ffb4ab",
+                        "on-error": "#690005",
+                        "on-tertiary": "#00382e",
+                        "on-secondary-fixed-variant": "#7e2c00",
+                        "surface": "#001524",
+                        "outline-variant": "#3b494c",
+                        "primary-container": "#1de9ff",
+                        "secondary": "#ffb598",
+                        "background": "#001524",
+                        "secondary-fixed-dim": "#ffb598",
+                        "surface-bright": "#213c50",
+                        "on-secondary-container": "#ffddd1",
+                        "surface-container-low": "#001e30",
+                        "on-background": "#cbe6ff",
+                        "tertiary-fixed-dim": "#00dfbf",
+                        "primary-fixed-dim": "#00dbf0",
+                        "secondary-container": "#b14101",
+                        "tertiary-fixed": "#3ffddb",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#94f1ff",
+                        "surface-container-lowest": "#00101c",
+                        "surface-container-high": "#0f2c40",
+                        "surface-container-highest": "#1c374b",
+                        "surface-dim": "#001524",
+                        "on-secondary": "#591d00",
+                        "on-tertiary-fixed": "#00201a",
+                        "on-tertiary-fixed-variant": "#005144",
+                        "on-secondary-fixed": "#360f00",
+                        "surface-tint": "#00dbf0",
+                        "on-surface-variant": "#bac9cc",
+                        "inverse-on-surface": "#173347",
+                        "on-surface": "#cbe6ff",
+                        "on-primary-container": "#006570",
+                        "on-tertiary-container": "#006858",
+                        "secondary-fixed": "#ffdbcd",
+                        "primary": "#cdf8ff",
+                        "surface-container": "#022235",
+                        "surface-variant": "#1c374b",
+                        "on-primary": "#00363c",
+                        "on-primary-fixed": "#001f24",
+                        "inverse-primary": "#006973",
+                        "on-error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-desktop": "64px",
+                        "container-max": "1440px",
+                        "margin-mobile": "20px",
+                        "unit": "4px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Hanken Grotesk"],
+                        "data-point": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Space Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "display-xl": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "data-point": ["14px", {"lineHeight": "1", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "500"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.2", "letterSpacing": "0.02em", "fontWeight": "700"}],
+                        "body-md": ["18px", {"lineHeight": "1.6", "letterSpacing": "0.01em", "fontWeight": "400"}],
+                        "display-xl": ["80px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass {
+            background: rgba(0, 21, 36, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-primary {
+            background: rgba(0, 219, 240, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 219, 240, 0.4);
+        }
+        .pulse-aqua {
+            box-shadow: 0 0 0 0 rgba(0, 219, 240, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 219, 240, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 219, 240, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 219, 240, 0); }
+        }
+        .bioluminescent-glow {
+            filter: drop-shadow(0 0 15px rgba(0, 219, 240, 0.6));
+        }
+        .grid-bg {
+            background-image: linear-gradient(rgba(0, 219, 240, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 219, 240, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md overflow-x-hidden">
+<!-- Top Navigation Bar -->
+<nav class="fixed top-0 w-full z-50 bg-surface/60 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(0,219,240,0.1)] transition-all duration-300 ease-in-out">
+<div class="flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
+<div class="font-display-xl text-headline-lg-mobile text-primary tracking-tighter uppercase">WatchTheBlue</div>
+<div class="hidden md:flex gap-8 font-body-md text-body-md tracking-tight">
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="#">Home</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Live Monitor</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Ocean Zones</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">Species</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">NGO Partners</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#">About</a>
+</div>
+<div class="flex items-center gap-6">
+<span class="material-symbols-outlined text-on-surface-variant hover:text-primary cursor-pointer transition-colors" data-icon="notifications">notifications</span>
+<button class="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold hover:brightness-110 transition-all">View Live Map</button>
+</div>
+</div>
+</nav>
+<!-- 1. Hero Section -->
+<header class="relative min-h-screen flex items-center justify-center pt-24 overflow-hidden">
+<div class="absolute inset-0 z-0">
+<img alt="Cinematic underwater coral reef" class="w-full h-full object-cover opacity-60 scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC63UVPDlKY6iPATq_3gLLK3iLhpkdjAY9tG2NQdRsw0oDtRwC3t5xhswokGgn56K-UEjMSfEUA7aEbEVRylIqsFq9jKSpAjdFA10k2X9DQF20V5zj2ROTKJoWW1OTU60rJcwmVZTJXRrD5aa1T69siNJk828aKDE78Q23Y3aJF2Cy6xwnKdSXvECmbH3fSVqAGVg8nQbRbK2goBi1XjS_OP5z0cLRp74aEeABWosvhrZllMLS4zrnv4byNI7T6sz5GDCAMNTTuDco"/>
+<div class="absolute inset-0 bg-gradient-to-b from-surface/40 via-surface/20 to-surface"></div>
+</div>
+<div class="relative z-10 text-center px-margin-mobile md:px-margin-desktop max-w-5xl">
+<div class="mb-8 bioluminescent-glow">
+<svg class="w-48 h-48 mx-auto opacity-80" viewbox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<circle class="text-primary-fixed-dim" cx="100" cy="100" fill="none" r="40" stroke="currentColor" stroke-width="0.5"></circle>
+<circle class="text-primary-fixed-dim" cx="100" cy="100" fill="none" r="60" stroke="currentColor" stroke-width="0.2"></circle>
+<path class="text-tertiary" d="M100 40 Q 110 70 100 100 T 100 160" fill="none" stroke="currentColor" stroke-width="1"></path>
+<path class="text-tertiary" d="M80 50 Q 70 80 90 110 T 80 150" fill="none" stroke="currentColor" stroke-width="0.5"></path>
+<path class="text-tertiary" d="M120 50 Q 130 80 110 110 T 120 150" fill="none" stroke="currentColor" stroke-width="0.5"></path>
+</svg>
+</div>
+<h1 class="font-display-xl text-headline-lg md:text-display-xl leading-none mb-4 tracking-tighter text-primary">THE OCEAN IS SENDING SIGNALS.</h1>
+<h2 class="font-headline-lg text-tertiary-fixed-dim mb-6">WE’RE LISTENING.</h2>
+<p class="font-body-md text-on-surface-variant max-w-2xl mx-auto mb-12">One platform monitoring marine stress, endangered species, and ocean health across the Indian coastline in real time.</p>
+<div class="flex flex-col md:flex-row gap-6 justify-center items-center">
+<button class="bg-primary text-on-primary font-bold px-10 py-4 rounded-xl text-lg shadow-[0_0_30px_rgba(0,219,240,0.3)] hover:scale-105 transition-all">Open Live Monitor</button>
+<button class="border border-primary/40 text-primary font-bold px-10 py-4 rounded-xl text-lg glass-primary hover:bg-primary/10 transition-all">How It Works</button>
+</div>
+<!-- Live Stats Bar -->
+<div class="mt-20 glass rounded-full px-8 py-6 flex flex-wrap justify-center gap-12 border-white/5">
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 bg-primary rounded-full pulse-aqua"></div>
+<div>
+<div class="font-data-point text-display-xs text-primary">04</div>
+<div class="font-label-caps text-on-surface-variant">Active Zones</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 bg-tertiary rounded-full pulse-aqua" style="animation-delay: 0.5s"></div>
+<div>
+<div class="font-data-point text-display-xs text-tertiary">06</div>
+<div class="font-label-caps text-on-surface-variant">Species Tracked</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-3 h-3 bg-secondary-fixed-dim rounded-full pulse-aqua" style="animation-delay: 1s"></div>
+<div>
+<div class="font-data-point text-display-xs text-secondary-fixed-dim">06</div>
+<div class="font-label-caps text-on-surface-variant">NGO Partners</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- 2. The Problem Section -->
+<section class="py-32 relative grid-bg">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<h2 class="font-headline-lg text-primary text-center mb-16 uppercase tracking-widest">THE INDIAN OCEAN IS UNDER STRESS.</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="glass p-10 border-white/10 hover:border-primary/30 transition-all group">
+<span class="material-symbols-outlined text-primary text-5xl mb-6 block group-hover:scale-110 transition-transform" data-icon="waves">waves</span>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4">2,000+</h3>
+<p class="text-on-surface-variant">Marine animals strand on Indian coasts every year, signal of increasing environmental distress.</p>
+</div>
+<div class="glass p-10 border-white/10 hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error text-5xl mb-6 block group-hover:scale-110 transition-transform" data-icon="thermostat">thermostat</span>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4">1.2°C</h3>
+<p class="text-on-surface-variant">Indian Ocean warming is 1.2°C faster than global average since 1950, disrupting ancient migration patterns.</p>
+</div>
+<div class="glass p-10 border-white/10 hover:border-tertiary/30 transition-all group">
+<span class="material-symbols-outlined text-tertiary text-5xl mb-6 block group-hover:scale-110 transition-transform" data-icon="rebase">rebase</span>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4">40%</h3>
+<p class="text-on-surface-variant">Of Indian coral reefs face severe bleaching threats from unprecedented heatwaves and pollution.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. How It Works -->
+<section class="py-32 bg-surface-container-lowest">
+<div class="max-w-container-max mx-auto px-margin-desktop text-center">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter relative">
+<!-- Connectors for Desktop -->
+<div class="hidden md:block absolute top-1/2 left-1/3 w-1/3 border-t-2 border-dashed border-primary/20 -translate-y-1/2"></div>
+<div class="hidden md:block absolute top-1/2 left-2/3 w-1/3 border-t-2 border-dashed border-primary/20 -translate-y-1/2"></div>
+<div class="flex flex-col items-center">
+<div class="w-24 h-24 rounded-full glass-primary flex items-center justify-center mb-8 relative z-10">
+<span class="material-symbols-outlined text-primary text-4xl" data-icon="sensors">sensors</span>
+</div>
+<h4 class="font-label-caps text-primary mb-2">Step 1</h4>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4 uppercase">We Collect</h3>
+<p class="text-on-surface-variant font-body-sm">Deep-sea buoys, orbital satellites, and shoreline acoustic sensors harvest petabytes of environmental data.</p>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-24 h-24 rounded-full glass-primary flex items-center justify-center mb-8 relative z-10">
+<span class="material-symbols-outlined text-primary text-4xl" data-icon="memory">memory</span>
+</div>
+<h4 class="font-label-caps text-primary mb-2">Step 2</h4>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4 uppercase">We Compute</h3>
+<p class="text-on-surface-variant font-body-sm">The Ocean Health Engine processes live feeds with proprietary AI to detect anomalies and stress events.</p>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-24 h-24 rounded-full glass-primary flex items-center justify-center mb-8 relative z-10">
+<span class="material-symbols-outlined text-primary text-4xl" data-icon="emergency_share">emergency_share</span>
+</div>
+<h4 class="font-label-caps text-primary mb-2">Step 3</h4>
+<h3 class="font-headline-lg-mobile text-on-surface mb-4 uppercase">We Alert</h3>
+<p class="text-on-surface-variant font-body-sm">Instant protocols are triggered, deploying NGO partners for rapid rescue and habitat stabilization.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Live Monitor Section -->
+<section class="min-h-screen bg-surface-container relative flex flex-col">
+<div class="absolute inset-0 opacity-20 pointer-events-none">
+<div class="w-full h-full grid-bg"></div>
+</div>
+<div class="p-8 flex justify-between items-center relative z-20">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-4 py-1 rounded-full border border-error/50 bg-error/10">
+<span class="w-2 h-2 bg-error rounded-full animate-pulse"></span>
+<span class="text-error font-label-caps">LIVE FEED</span>
+</div>
+<div class="flex gap-4">
+<button class="px-4 py-1 font-label-caps border border-primary/20 text-primary hover:bg-primary/10 transition-all">Arabian Sea</button>
+<button class="px-4 py-1 font-label-caps border border-primary text-primary bg-primary/10">Bay of Bengal</button>
+<button class="px-4 py-1 font-label-caps border border-primary/20 text-primary hover:bg-primary/10 transition-all">Lakshadweep</button>
+</div>
+</div>
+<div class="text-on-surface-variant font-data-point">08°12'26"N 76°15'32"E</div>
+</div>
+<div class="flex-grow relative flex items-center justify-center p-margin-desktop overflow-hidden">
+<!-- Simulated Map Area -->
+<div class="relative w-full h-[600px] rounded-xl overflow-hidden border border-white/5 shadow-2xl">
+<img class="w-full h-full object-cover opacity-40" data-alt="A top-down satellite view of the Indian Ocean coastline, rendered with digital radar overlays, glowing cyan depth lines, and pulsating data points marking marine life activity. The aesthetic is dark, high-tech, and scientific." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBV0OfyGjTSTP4bGnwK9MUHCKFY3IS98V9TEsqrUgx5X-srfylgrE9Q-RLspBAo2T8lZaFKhqTsH7pmsT0GWxWyUKhsco6-50FgwIjcDzU3Afu_Z8Z79Jh1OTmPPjs8-12oNYCmtKyddIadpihWaGYk65IgY9pcfsQ7PIGH-QuGOU0N-9adKx8RnF46G7Ew1vYCtpirMRlzX5AeMYaluPVC5C94r8sd0udbEB2XuM70DLMjBZe2EDoqseynILKOR5bKjS6zHO3pDKc"/>
+<!-- Command Overlays -->
+<div class="absolute top-8 right-8 flex flex-col gap-4">
+<div class="glass p-6 w-72 border-primary/20">
+<h5 class="font-label-caps text-primary mb-4">Coral Health Index</h5>
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<span class="text-sm">Vulnerability</span>
+<span class="text-error font-data-point">CRITICAL</span>
+</div>
+<div class="h-1 bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-error w-[88%]"></div>
+</div>
+</div>
+</div>
+<div class="glass p-6 w-72 border-tertiary/20">
+<h5 class="font-label-caps text-tertiary mb-4">Oxygen Saturation</h5>
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<span class="text-sm">Level: 92%</span>
+<span class="text-tertiary font-data-point">STABLE</span>
+</div>
+<div class="h-1 bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[92%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Radar Scan Effect (CSS Only) -->
+<div class="absolute inset-0 bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,219,240,0.1)_0deg,transparent_60deg)] pointer-events-none"></div>
+</div>
+</div>
+</section>
+<!-- 5. Ocean Zones & Species Grid -->
+<section class="py-32 px-margin-desktop max-w-container-max mx-auto">
+<h2 class="font-headline-lg text-on-surface mb-16 text-center uppercase">Coastal Priority Zones</h2>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-32">
+<!-- Zone Cards -->
+<div class="glass p-8 border-white/5 hover:border-primary/50 transition-all cursor-pointer">
+<div class="font-label-caps text-primary mb-2">Zone 01</div>
+<h3 class="font-headline-lg-mobile mb-4">Lakshadweep</h3>
+<div class="flex items-center gap-2 mb-6">
+<span class="w-2 h-2 bg-error rounded-full animate-pulse"></span>
+<span class="text-xs text-error">Stress: High</span>
+</div>
+<button class="text-primary font-data-point text-xs flex items-center gap-2">ANALYZE SECTOR <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span></button>
+</div>
+<!-- Repeated for brevity -->
+<div class="glass p-8 border-white/5 hover:border-primary/50 transition-all cursor-pointer">
+<div class="font-label-caps text-primary mb-2">Zone 02</div>
+<h3 class="font-headline-lg-mobile mb-4">Andaman</h3>
+<div class="flex items-center gap-2 mb-6">
+<span class="w-2 h-2 bg-tertiary rounded-full"></span>
+<span class="text-xs text-tertiary">Stress: Low</span>
+</div>
+<button class="text-primary font-data-point text-xs flex items-center gap-2">ANALYZE SECTOR <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span></button>
+</div>
+<div class="glass p-8 border-white/5 hover:border-primary/50 transition-all cursor-pointer">
+<div class="font-label-caps text-primary mb-2">Zone 03</div>
+<h3 class="font-headline-lg-mobile mb-4">Gulf of Kutch</h3>
+<div class="flex items-center gap-2 mb-6">
+<span class="w-2 h-2 bg-secondary-fixed-dim rounded-full"></span>
+<span class="text-xs text-secondary-fixed-dim">Stress: Mid</span>
+</div>
+<button class="text-primary font-data-point text-xs flex items-center gap-2">ANALYZE SECTOR <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span></button>
+</div>
+<div class="glass p-8 border-white/5 hover:border-primary/50 transition-all cursor-pointer">
+<div class="font-label-caps text-primary mb-2">Zone 04</div>
+<h3 class="font-headline-lg-mobile mb-4">Sundarbans</h3>
+<div class="flex items-center gap-2 mb-6">
+<span class="w-2 h-2 bg-error rounded-full animate-pulse"></span>
+<span class="text-xs text-error">Stress: High</span>
+</div>
+<button class="text-primary font-data-point text-xs flex items-center gap-2">ANALYZE SECTOR <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span></button>
+</div>
+</div>
+<h2 class="font-headline-lg text-on-surface mb-16 text-center uppercase">Sentinels of the Deep</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Species Card -->
+<div class="glass overflow-hidden group">
+<div class="h-64 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="A majestic Olive Ridley sea turtle swimming through clear blue Indian Ocean waters. The lighting is ethereal with sunbeams piercing through the surface. The image quality is ultra-realistic with high scientific detail." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1SR_6UDv8dmKKRpfM1gJHiThkuK-Pin-OoEtl3-7ytg2uiQkf-4Ey-2_jAYI-I4d65i8VZBlEGMk_27eryQs4fBl7SELYKxGURp-v_WtuADLk5_1MQWBW0A1HSyJ41Ee6i9V4AkWl_iYyo8jYuyjsdXq15J91zTNZLIMTBjHnqXhmKaNYa_jd8zmH8EEP4JqpGRzyxR410n2wJcEKHpG0-3ZLEsMLtfZSTYnP8KvzwG4N5wg5RvNBnt2l3v9eHKKs7YGHkRtubm8"/>
+<div class="absolute top-4 right-4 bg-error/80 backdrop-blur-md px-3 py-1 rounded text-xs font-bold text-white uppercase">Vulnerable</div>
+</div>
+<div class="p-8">
+<h3 class="font-headline-lg-mobile mb-4">Olive Ridley Turtle</h3>
+<div class="flex justify-between items-center mb-6">
+<span class="text-on-surface-variant text-sm">Threat Meter</span>
+<span class="text-error font-data-point">82%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-error w-[82%]"></div>
+</div>
+<button class="w-full mt-8 border border-white/10 py-3 font-label-caps hover:bg-white/5 transition-all">LIVE TRACKING</button>
+</div>
+</div>
+<!-- Species Card 2 -->
+<div class="glass overflow-hidden group">
+<div class="h-64 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="A massive Whale Shark drifting near the ocean surface, filtered light creating a beautiful dappled pattern on its skin. The water is a deep tropical turquoise. Cinematic and high-definition photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBV-8x2B-2aKrXV2Jm4Y8ID0_BxCy388n1mJYs5mreGfgc0tJIlL2JjLL2tEzm93lHNd7_w-DZGXJ_x6VN82BEiu8kzbYZvvVPOgIsTC5EJQdB_va0kZYrhkhfh6K_jzPn-XMFdOlUzgi3osghXnDnEpy5Vovyetjx-JP8GXvEwCWXDQEO9RTXWfPWPrbg9-GvFarG-_lJ0lhiybmVW99j1WLokA6E06lJmDCLe8HgPcMOf95suGnu7Rl4FQhIYv0CT2_zh6DLLJog"/>
+<div class="absolute top-4 right-4 bg-tertiary/80 backdrop-blur-md px-3 py-1 rounded text-xs font-bold text-on-tertiary uppercase">Endangered</div>
+</div>
+<div class="p-8">
+<h3 class="font-headline-lg-mobile mb-4">Whale Shark</h3>
+<div class="flex justify-between items-center mb-6">
+<span class="text-on-surface-variant text-sm">Threat Meter</span>
+<span class="text-tertiary font-data-point">45%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[45%]"></div>
+</div>
+<button class="w-full mt-8 border border-white/10 py-3 font-label-caps hover:bg-white/5 transition-all">LIVE TRACKING</button>
+</div>
+</div>
+<!-- Species Card 3 -->
+<div class="glass overflow-hidden group">
+<div class="h-64 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="A pod of Dugongs grazing on seagrass in a shallow coastal bay in the Andaman Sea. The lighting is soft and natural, emphasizing the peaceful yet fragile nature of their habitat. Top-tier wildlife photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBbEp86_5ry2NmEprEP149_Mf7DER0CItL0trt0z9aoxud5HsIr4WfavDjxfHWsrz6pjR7wRdUbcO_tc-hapSHSaonSg6teT-eVstJXvfrqjt4xsyP2hRKDVUQyDE6z-xasABJwGdAV0xgBM8Af7RoWUnaw9u67BindMx0ySojW8SMO-Pk4MKOTl6hsF3Ol6Ro4Gihtrl5peJLWWhIPnjfvc7vdV3CnMchUmeQDGZl8z8zbU5QvYOGS1MtLv4YoefpVDXBtgNULlU"/>
+<div class="absolute top-4 right-4 bg-secondary-fixed-dim/80 backdrop-blur-md px-3 py-1 rounded text-xs font-bold text-on-secondary uppercase">Protected</div>
+</div>
+<div class="p-8">
+<h3 class="font-headline-lg-mobile mb-4">Dugong</h3>
+<div class="flex justify-between items-center mb-6">
+<span class="text-on-surface-variant text-sm">Threat Meter</span>
+<span class="text-secondary-fixed-dim font-data-point">68%</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="h-full bg-secondary-fixed-dim w-[68%]"></div>
+</div>
+<button class="w-full mt-8 border border-white/10 py-3 font-label-caps hover:bg-white/5 transition-all">LIVE TRACKING</button>
+</div>
+</div>
+</div>
+</section>
+<!-- 6. NGO & Impact -->
+<section class="py-32 bg-surface-container-low border-y border-white/5">
+<div class="max-w-container-max mx-auto px-margin-desktop text-center">
+<h4 class="font-label-caps text-primary mb-4 tracking-widest">Powering Real-World Conservation</h4>
+<h2 class="font-display-xl text-headline-lg md:text-headline-lg mb-20 uppercase">7,500km Coastline Monitored</h2>
+<div class="grid grid-cols-2 md:grid-cols-6 gap-8 grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-700">
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="eco">eco</span>
+<span class="font-label-caps">ReefWatch</span>
+</div>
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="forest">forest</span>
+<span class="font-label-caps">TREE Foundation</span>
+</div>
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="water">water</span>
+<span class="font-label-caps">Blue Cross</span>
+</div>
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="monitoring">monitoring</span>
+<span class="font-label-caps">Marine Life</span>
+</div>
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="handshake">handshake</span>
+<span class="font-label-caps">OceanTrust</span>
+</div>
+<div class="flex flex-col items-center gap-4">
+<span class="material-symbols-outlined text-4xl text-primary" data-icon="policy">policy</span>
+<span class="font-label-caps">Wildlife Prot</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 7. Signup Section -->
+<section class="py-32 px-margin-desktop">
+<div class="max-w-container-max mx-auto grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
+<div>
+<h2 class="font-display-xl text-headline-lg leading-tight text-primary mb-8">GET OCEAN ALERTS BEFORE DISASTER STRIKES.</h2>
+<p class="text-on-surface-variant max-w-md">Join a network of thousands dedicated to immediate marine intervention. Choose your mission profile to begin.</p>
+</div>
+<div class="glass p-10 border-white/10 rounded-2xl relative">
+<div class="flex gap-4 mb-10 border-b border-white/10">
+<button class="pb-4 font-label-caps text-primary border-b-2 border-primary">As NGO Partner</button>
+<button class="pb-4 font-label-caps text-on-surface-variant hover:text-white transition-colors">As Citizen Scientist</button>
+</div>
+<form class="space-y-6">
+<div>
+<label class="block font-label-caps text-xs text-on-surface-variant mb-2">Full Legal Name</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-lg p-4 focus:border-primary focus:ring-0 text-white" placeholder="Dr. Sarah K." type="text"/>
+</div>
+<div>
+<label class="block font-label-caps text-xs text-on-surface-variant mb-2">Professional Email</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-lg p-4 focus:border-primary focus:ring-0 text-white" placeholder="sarah@ocean-research.org" type="email"/>
+</div>
+<button class="w-full bg-primary text-on-primary font-bold py-5 rounded-xl uppercase tracking-widest hover:brightness-110 transition-all">Request Mission Credentials</button>
+</form>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-white/5 py-12 px-margin-desktop">
+<div class="max-w-container-max mx-auto flex flex-col md:flex-row justify-between items-center gap- gutter">
+<div class="font-headline-lg text-primary uppercase text-2xl tracking-tighter">WatchTheBlue</div>
+<div class="flex flex-wrap justify-center gap-8 font-body-sm text-body-sm text-on-surface-variant">
+<a class="hover:text-tertiary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-tertiary transition-colors" href="#">Terms of Service</a>
+<a class="hover:text-tertiary transition-colors" href="#">Research Credits</a>
+<a class="hover:text-tertiary transition-colors" href="#">Partner Portal</a>
+</div>
+<div class="text-tertiary font-body-sm text-body-sm opacity-80 hover:opacity-100 transition-opacity">
+                © 2024 WatchTheBlue. Mission-critical marine intelligence.
+            </div>
+</div>
+<div class="text-center mt-8 text-[10px] uppercase tracking-[0.3em] text-white/20">
+            Powered by Social Hackathon Credits &amp; Satellite Telemetry
+        </div>
+</footer>
+</body></html>
