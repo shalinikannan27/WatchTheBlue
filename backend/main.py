@@ -13,7 +13,7 @@ load_dotenv()
 from obis_fetch import get_species_by_location
 from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
 from cmems_fetch import fetch_cmems_with_fallback
-from stress_score import calculate_marine_stress
+from stress_score import calculate_marine_stress, get_species_stress_impact
 
 app = FastAPI(
     title="WatchTheBlue API Backend",
@@ -121,8 +121,8 @@ def get_ecological_stress(
     # 3. Calculate Consolidated Stress
     stress_analysis = calculate_marine_stress(
         sst=sst,
-        hotspot=hotspot,
-        dhw=dhw,
+        hotspot_anomaly=hotspot,
+        degree_heating_weeks=dhw,
         ph=ph,
         salinity=salinity,
         chlorophyll=chlorophyll,
@@ -155,7 +155,8 @@ def get_habitat_suitability(
     Returns:
     - Environmental metrics (SST, pH, Salinity) from NOAA and CMEMS
     - Species occurrence data from OBIS showing what lives in this area
-    - Habitat suitability analysis based on species-environment interaction
+    - Ecosystem stress score affecting species vulnerability
+    - Species-specific vulnerability assessment based on current stress
     """
     # Fetch ambient environment
     noaa_res = fetch_noaa_with_fallback(lat, lon)
@@ -171,13 +172,49 @@ def get_habitat_suitability(
         "chlorophyll_mg_m3": cmems_res.get("chlorophyll_mg_m3")
     }
     
+    # Calculate ecosystem stress score
+    sst = noaa_res.get("sst_celsius", 25.0)
+    hotspot = noaa_res.get("hotspot_anomaly", 0.0)
+    dhw = noaa_res.get("degree_heating_weeks", 0.0)
+    salinity = cmems_res.get("salinity_psu", 35.0)
+    chlorophyll = cmems_res.get("chlorophyll_mg_m3", 0.1)
+    ph = cmems_res.get("ph", 8.1)
+    current_speed = cmems_res.get("current_velocity_ms", 0.15)
+    
+    stress_analysis = calculate_marine_stress(
+        sst=sst,
+        hotspot_anomaly=hotspot,
+        degree_heating_weeks=dhw,
+        ph=ph,
+        salinity=salinity,
+        chlorophyll=chlorophyll,
+        current_speed=current_speed
+    )
+    ecosystem_stress_score = stress_analysis.get("overall_stress_score", 0)
+    
     # Fetch species occurrence data from OBIS
     species_data = get_species_by_location(lat, lon)
+    species_occurrences = species_data.get("occurrences", [])
+    
+    # Calculate species-specific vulnerabilities
+    species_vulnerability = []
+    for species in species_occurrences:
+        species_name = species.get("scientific_name", "Unknown")
+        impact = get_species_stress_impact(species_name, ecosystem_stress_score)
+        species_vulnerability.append({
+            "species_occurrence": species,
+            "stress_impact": impact
+        })
     
     return {
         "coordinates": {"latitude": lat, "longitude": lon},
         "environmental_metrics": current_env,
-        "species_occurrences": species_data.get("occurrences", []),
+        "ecosystem_stress": {
+            "stress_score": ecosystem_stress_score,
+            "stress_level": stress_analysis.get("stress_level", "UNKNOWN"),
+            "contributing_factors": stress_analysis.get("contributing_factors", [])
+        },
+        "species_occurrences": species_vulnerability,
         "species_count": species_data.get("count", 0),
         "data_source": species_data.get("source", "OBIS API")
     }
