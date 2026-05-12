@@ -52,23 +52,11 @@ class StressScoreResponse(BaseModel):
     stress_analysis: Dict[str, Any]
 
 @app.get("/")
-def read_root():
+def home():
     """
     Root directory metadata
     """
-    return {
-        "app": "WatchTheBlue Backend Service",
-        "version": "1.0.0",
-        "status": "Online",
-        "documentation": "/docs",
-        "endpoints": {
-            "obis_occurrences": "/api/obis/occurrences",
-            "noaa_sst": "/api/noaa/sst",
-            "cmems_marine_metrics": "/api/cmems/marine-metrics",
-            "ecological_stress": "/api/ecological-stress",
-            "species_habitat_suitability": "/api/species/habitat-suitability"
-        }
-    }
+    return {"message": "OceanPulse Backend Running"}
 
 @app.get("/api/obis/occurrences")
 def get_obis_occurrences(
