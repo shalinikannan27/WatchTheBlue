@@ -12,7 +12,7 @@ load_dotenv()
 # Import local handlers
 from obis_fetch import fetch_obis_occurrences, fetch_taxon_info, search_taxon
 from noaa_fetch import fetch_noaa_sst_data
-from cmems_fetch import fetch_cmems_marine_data
+from cmems_fetch import fetch_cmems_with_fallback
 from stress_score import calculate_marine_stress
 from species_logic import analyze_habitat_suitability, clean_obis_coordinates, get_species_profile
 
@@ -109,8 +109,11 @@ def get_cmems_metrics(
 ):
     """
     Retrieve oceanographic parameters (Salinity, pH, Chlorophyll, Currents) from Copernicus Marine.
+    
+    Returns real CMEMS data when available. If CMEMS API is unavailable,
+    gracefully falls back to realistic oceanographic simulation.
     """
-    return fetch_cmems_marine_data(lat, lon, date)
+    return fetch_cmems_with_fallback(lat, lon, date)
 
 @app.get("/api/ecological-stress", response_model=StressScoreResponse)
 def get_ecological_stress(
@@ -126,8 +129,8 @@ def get_ecological_stress(
     hotspot = noaa_res.get("hotspot_anomaly", 0.0)
     dhw = noaa_res.get("degree_heating_weeks", 0.0)
     
-    # 2. Fetch CMEMS data (Salinity, Chlorophyll, pH, Currents)
-    cmems_res = fetch_cmems_marine_data(lat, lon)
+    # 2. Fetch CMEMS data (Salinity, Chlorophyll, pH, Currents) with fallback
+    cmems_res = fetch_cmems_with_fallback(lat, lon)
     salinity = cmems_res.get("salinity_psu", 35.0)
     chlorophyll = cmems_res.get("chlorophyll_mg_m3", 0.1)
     ph = cmems_res.get("ph", 8.1)
@@ -171,7 +174,7 @@ def get_habitat_suitability(
     """
     # Fetch ambient environment
     noaa_res = fetch_noaa_sst_data(lat, lon)
-    cmems_res = fetch_cmems_marine_data(lat, lon)
+    cmems_res = fetch_cmems_with_fallback(lat, lon)
     
     current_env = {
         "sst_celsius": noaa_res.get("sst_celsius"),
