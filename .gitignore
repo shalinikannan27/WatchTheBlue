@@ -125,6 +125,11 @@ venv.bak/
 *.nc
 *.nc.*
 
+# Planning and documentation (temporary)
+INTEGRATION_CHECKLIST.md
+NOAA_INTEGRATION.md
+plans/
+
 # Spyder project settings
 .spyderproject
 .spyder-py3
