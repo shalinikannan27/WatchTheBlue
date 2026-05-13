@@ -1,4 +1,7 @@
+import logging
 import os
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +18,29 @@ from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
 from cmems_fetch import fetch_cmems_with_fallback
 from stress_score import calculate_marine_stress, get_species_stress_impact
 from species_logic import species_risk
+from ml_inference import (
+    load_all_models,
+    run_prediction,
+    build_zone_panel_payload,
+    zones_risk_overlay,
+    get_loaded_model_names,
+)
+
+logger = logging.getLogger("main")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_all_models()
+    logger.info("ML artifacts in memory: %s", get_loaded_model_names() or "(none)")
+    yield
+
 
 app = FastAPI(
     title="WatchTheBlue API Backend",
     description="Marine biodiversity, ecological stress, and ocean temperature forecasting server.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS for seamless frontend integration
@@ -219,6 +240,67 @@ def get_habitat_suitability(
         "species_count": species_data.get("count", 0),
         "data_source": species_data.get("source", "OBIS API")
     }
+
+
+@app.get("/api/predict")
+def api_predict(
+    lat: float = Query(..., ge=-90.0, le=90.0),
+    lon: float = Query(..., ge=-180.0, le=180.0),
+):
+    """
+    Core ML + stress fusion for a coordinate. Uses cached live fetches when possible.
+    """
+    try:
+        pred = run_prediction(lat, lon, use_cache=True)
+        return {"success": True, **pred}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_predict failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Prediction pipeline failed") from exc
+
+
+@app.get("/api/species-risk")
+def api_species_risk(
+    lat: float = Query(..., ge=-90.0, le=90.0),
+    lon: float = Query(..., ge=-180.0, le=180.0),
+):
+    """
+    Stranding / drift focal point: full point prediction plus sector-wide risk overlay
+    for map integration (cached per sector center).
+    """
+    try:
+        pred = run_prediction(lat, lon, use_cache=True)
+        overlay = zones_risk_overlay()
+        return {
+            "success": True,
+            "focus_coordinates": pred["coordinates"],
+            "point_prediction": pred,
+            "zones_risk_overlay": overlay,
+            "panel": build_zone_panel_payload(pred),
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_species-risk failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Species risk analysis failed") from exc
+
+
+@app.get("/api/zone-analysis")
+def api_zone_analysis(
+    lat: float = Query(..., ge=-90.0, le=90.0),
+    lon: float = Query(..., ge=-180.0, le=180.0),
+):
+    """
+    Map zone click: live ocean conditions, stress, ML species ranking, and all-sector overlay.
+    """
+    try:
+        pred = run_prediction(lat, lon, use_cache=True)
+        panel = build_zone_panel_payload(pred)
+        panel["zones_risk_overlay"] = zones_risk_overlay()
+        panel["success"] = True
+        return panel
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_zone-analysis failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Zone analysis failed") from exc
+
+
 def get_zone_name(lat: float, lon: float) -> str:
     if 8 <= lat <= 12 and 71 <= lon <= 74:
         return "Lakshadweep"

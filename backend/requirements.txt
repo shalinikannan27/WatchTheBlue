@@ -8,3 +8,6 @@ copernicusmarine
 pytest
 xarray
 netCDF4
+numpy
+scikit-learn
+joblib

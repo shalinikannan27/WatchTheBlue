@@ -208,7 +208,12 @@ function SpeciesDriftLayer({ species, isSelected, onSelect }) {
 }
 
 // ─── Main exported component ─────────────────────────────────────────────────
-export default function DriftTracker({ selectedSpeciesId, onSelectSpecies }) {
+export default function DriftTracker({
+  selectedSpeciesId,
+  onSelectSpecies,
+  mapZones,
+  zonesRiskOverlay,
+}) {
   const handleSelect = useCallback((id) => {
     onSelectSpecies(prev => prev === id ? null : id)
   }, [onSelectSpecies])
@@ -223,6 +228,31 @@ export default function DriftTracker({ selectedSpeciesId, onSelectSpecies }) {
           onSelect={handleSelect}
         />
       ))}
+
+      {/* Additive: sector risk halos while drift species is active (does not alter drift paths). */}
+      {selectedSpeciesId && mapZones && zonesRiskOverlay &&
+        mapZones.map(zone => {
+          const meta = zonesRiskOverlay[zone.id]
+          if (!meta) return null
+          const lvl = meta.risk_level || 'LOW'
+          const color = zone.color
+          const isCrit = lvl === 'CRITICAL'
+          return (
+            <CircleMarker
+              key={`drift-risk-${zone.id}`}
+              center={zone.center}
+              radius={isCrit ? 22 : lvl === 'HIGH' ? 16 : 12}
+              pathOptions={{
+                color,
+                weight: isCrit ? 2.5 : 1.5,
+                opacity: isCrit ? 0.95 : 0.55,
+                fillColor: color,
+                fillOpacity: isCrit ? 0.22 : 0.08,
+                className: isCrit ? 'drift-zone-risk drift-zone-risk--pulse' : 'drift-zone-risk',
+              }}
+            />
+          )
+        })}
     </>
   )
 }

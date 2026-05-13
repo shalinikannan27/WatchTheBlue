@@ -1,11 +1,12 @@
-import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents } from 'react-leaflet'
-import { useState, useMemo, useCallback } from 'react'
+import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, Rectangle } from 'react-leaflet'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { divIcon } from 'leaflet'
 import { useNavigate } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 import ZonePanel from './ZonePanel'
 import DriftTracker from './DriftTracker'
 import { DRIFT_SPECIES } from '../data/driftData'
+import { API_BASE_URL } from '../config'
 
 // ─── Zone definitions ────────────────────────────────────────────────────────
 const ZONES = [
@@ -18,43 +19,51 @@ const ZONES = [
 const SAMPLE_ZONE_DATA = {
     arabian_sea: {
         zone: 'arabian_sea',
+        zone_display: 'Arabian Sea',
         conditions: { temperature: 28.1, temperature_anomaly: 0.7, oxygen: 4.8, ph: 8.11 },
         stress_score: 35, stress_level: 'moderate', stress_color: '#facc15',
         coral_bleaching_alert: false,
         species_at_risk: [
             { name: 'Indian Ocean Humpback Dolphin', risk: 'moderate', ngo: 'Terra Conscious', note: 'Entanglement risk increasing in coastal shipping lanes.' },
             { name: 'Green Sea Turtle', risk: 'moderate', ngo: 'Wildlife Trust of India', note: 'Nesting beaches under pressure from light pollution.' }
-        ]
+        ],
+        ml_layer_summary: 'Offline sample: connect the backend for live NOAA/CMEMS fusion and .pkl inference.',
     },
     bay_of_bengal: {
         zone: 'bay_of_bengal',
+        zone_display: 'Bay of Bengal',
         conditions: { temperature: 29.8, temperature_anomaly: 1.6, oxygen: 3.9, ph: 8.02 },
         stress_score: 67, stress_level: 'high', stress_color: '#a855f7',
         coral_bleaching_alert: true,
         species_at_risk: [
             { name: 'Olive Ridley Sea Turtle', risk: 'high', ngo: 'TREE Foundation', note: 'Mass strandings documented on Odisha coast.' },
             { name: 'Irrawaddy Dolphin', risk: 'high', ngo: 'WWF India', note: 'Delta habitat fragmentation impacting breeding zones.' }
-        ]
+        ],
+        ml_layer_summary: 'Offline sample: connect the backend for live NOAA/CMEMS fusion and .pkl inference.',
     },
     lakshadweep: {
         zone: 'lakshadweep',
+        zone_display: 'Lakshadweep Sea',
         conditions: { temperature: 31.2, temperature_anomaly: 2.3, oxygen: 3.5, ph: 7.94 },
         stress_score: 82, stress_level: 'critical', stress_color: '#ef4444',
         coral_bleaching_alert: true,
         species_at_risk: [
             { name: 'Hawksbill Turtle', risk: 'critical', ngo: 'Dakshin Foundation', note: 'Reef bleaching reducing foraging habitat quality.' },
             { name: 'Spinner Dolphin', risk: 'high', ngo: 'Coastal Impact', note: 'Tourism vessel traffic disrupting resting lagoons.' }
-        ]
+        ],
+        ml_layer_summary: 'Offline sample: connect the backend for live NOAA/CMEMS fusion and .pkl inference.',
     },
     andaman_sea: {
         zone: 'andaman_sea',
+        zone_display: 'Andaman Sea',
         conditions: { temperature: 27.4, temperature_anomaly: 0.3, oxygen: 5.2, ph: 8.16 },
         stress_score: 28, stress_level: 'healthy', stress_color: '#22c55e',
         coral_bleaching_alert: false,
         species_at_risk: [
             { name: 'Dugong', risk: 'moderate', ngo: 'ReefWatch Marine Conservation', note: 'Seagrass meadows are stable but monitored for decline.' },
             { name: 'Andaman Clownfish', risk: 'low', ngo: 'ANET', note: 'Localized reef stress near high-diving routes.' }
-        ]
+        ],
+        ml_layer_summary: 'Offline sample: connect the backend for live NOAA/CMEMS fusion and .pkl inference.',
     }
 }
 
@@ -82,6 +91,50 @@ const LEGEND = [
     { color: '#a855f7', label: 'High' },
     { color: '#ef4444', label: 'Critical' },
 ]
+
+const RISK_LEVEL_COLORS = {
+    LOW: '#22c55e',
+    MODERATE: '#facc15',
+    HIGH: '#a855f7',
+    CRITICAL: '#ef4444',
+}
+
+const RISK_FILL_OPACITY = {
+    LOW: 0.1,
+    MODERATE: 0.14,
+    HIGH: 0.2,
+    CRITICAL: 0.26,
+}
+
+function ZoneRiskOverlays({ zones, overlay }) {
+    if (!overlay) return null
+    return (
+        <>
+            {zones.map(zone => {
+                const meta = overlay[zone.id]
+                if (!meta) return null
+                const lvl = meta.risk_level || 'LOW'
+                const color = RISK_LEVEL_COLORS[lvl] || '#38bdf8'
+                const [[south, west], [north, east]] = zone.bounds
+                const pulse = lvl === 'CRITICAL' ? ' risk-zone-rect--pulse' : ''
+                return (
+                    <Rectangle
+                        key={`risk-${zone.id}`}
+                        bounds={[[south, west], [north, east]]}
+                        pathOptions={{
+                            color,
+                            weight: 1.5,
+                            opacity: 0.85,
+                            fillColor: color,
+                            fillOpacity: RISK_FILL_OPACITY[lvl] ?? 0.12,
+                            className: `risk-zone-rect risk-zone-rect--${String(lvl).toLowerCase()}${pulse}`,
+                        }}
+                    />
+                )
+            })}
+        </>
+    )
+}
 
 // ─── Drift species selector pill list ────────────────────────────────────────
 function DriftSpeciesBar({ selected, onSelect }) {
@@ -132,6 +185,8 @@ export default function MapPage() {
     const [selectedData, setSelectedData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [selectedSpeciesId, setSelectedSpeciesId] = useState(null)
+    const [zonesRiskOverlay, setZonesRiskOverlay] = useState(null)
+    const [predictionError, setPredictionError] = useState(false)
     const navigate = useNavigate()
 
     const zoneIcons = useMemo(() =>
@@ -149,17 +204,61 @@ export default function MapPage() {
     const fetchZoneData = useCallback(async (zone) => {
         const [lat, lon] = zone.center
         setLoading(true)
-        setSelectedSpeciesId(null) // clear drift when zone selected
+        setPredictionError(false)
         try {
-            const res = await fetch(`http://localhost:8000/api/zone?lat=${lat}&lon=${lon}`)
+            const res = await fetch(`${API_BASE_URL}/api/zone-analysis?lat=${lat}&lon=${lon}`)
+            if (!res.ok) throw new Error(`zone-analysis ${res.status}`)
             const data = await res.json()
-            setSelectedData(data?.zone ? data : { ...SAMPLE_ZONE_DATA[zone.id] })
-        } catch {
-            setSelectedData({ ...SAMPLE_ZONE_DATA[zone.id] })
+            if (data.zones_risk_overlay) setZonesRiskOverlay(data.zones_risk_overlay)
+            if (data.zone && data.conditions) {
+                setSelectedData(data)
+            } else {
+                setSelectedData({ ...SAMPLE_ZONE_DATA[zone.id], prediction: null })
+                setPredictionError(true)
+            }
+        } catch (err) {
+            console.error('[WatchTheBlue] zone-analysis failed, using sample data:', err)
+            setSelectedData({ ...SAMPLE_ZONE_DATA[zone.id], prediction: null })
+            setPredictionError(true)
         } finally {
             setLoading(false)
         }
     }, [])
+
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/zone-analysis?lat=13&lon=80`)
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled && data.zones_risk_overlay) setZonesRiskOverlay(data.zones_risk_overlay)
+            } catch (e) {
+                console.warn('[WatchTheBlue] initial sector overlay prefetch:', e)
+            }
+        })()
+        return () => { cancelled = true }
+    }, [])
+
+    useEffect(() => {
+        if (!selectedSpeciesId) return undefined
+        const sp = DRIFT_SPECIES.find(s => s.id === selectedSpeciesId)
+        if (!sp) return undefined
+        let cancelled = false
+        ;(async () => {
+            try {
+                const res = await fetch(
+                    `${API_BASE_URL}/api/species-risk?lat=${sp.strandingLat}&lon=${sp.strandingLon}`,
+                )
+                if (!res.ok) throw new Error(String(res.status))
+                const j = await res.json()
+                if (!cancelled && j.zones_risk_overlay) setZonesRiskOverlay(j.zones_risk_overlay)
+            } catch (e) {
+                console.warn('[WatchTheBlue] species-risk overlay:', e)
+            }
+        })()
+        return () => { cancelled = true }
+    }, [selectedSpeciesId])
 
     return (
         <div className="map-page-root">
@@ -173,7 +272,7 @@ export default function MapPage() {
                 <div className="map-topbar-center">
                     <span className="map-live-dot" />
                     <span className="map-live-label">LIVE FEED</span>
-                    <span className="map-topbar-coords">08°12′26″N &nbsp; 76°15′32″E</span>
+                    <span className="map-topbar-tagline">Indian Ocean · AI-assisted stranding risk intelligence</span>
                 </div>
 
                 <div className="map-topbar-right">
@@ -212,6 +311,8 @@ export default function MapPage() {
                             keepBuffer={4}
                         />
 
+                        <ZoneRiskOverlays zones={ZONES} overlay={zonesRiskOverlay} />
+
                         {/* Zone markers */}
                         {ZONES.map(zone => (
                             <Marker
@@ -230,6 +331,8 @@ export default function MapPage() {
                         <DriftTracker
                             selectedSpeciesId={selectedSpeciesId}
                             onSelectSpecies={setSelectedSpeciesId}
+                            mapZones={ZONES}
+                            zonesRiskOverlay={zonesRiskOverlay}
                         />
 
                         <MapClickHandler onZoneSelect={fetchZoneData} />
@@ -245,6 +348,7 @@ export default function MapPage() {
                         <ZonePanel
                             data={selectedData}
                             loading={loading}
+                            predictionError={predictionError}
                             onClose={() => setSelectedData(null)}
                         />
                     )}

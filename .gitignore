@@ -161,3 +161,6 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
+
+# Frontend dependencies
+node_modules/
