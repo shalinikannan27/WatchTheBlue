@@ -1,4 +1,8 @@
+import { useNavigate } from 'react-router-dom'
+
 export default function Hero() {
+  const navigate = useNavigate()
+
   return (
     <header className="relative min-h-screen flex items-center justify-center pt-24 overflow-hidden">
       <div className="absolute inset-0 z-0">
@@ -23,7 +27,12 @@ export default function Hero() {
         <h2 className="font-headline-lg text-tertiary-fixed-dim mb-6">WE'RE LISTENING.</h2>
         <p className="font-body-md text-on-surface-variant max-w-2xl mx-auto mb-12">One platform monitoring marine stress, endangered species, and ocean health across the Indian coastline in real time.</p>
         <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
-          <button className="bg-primary text-on-primary font-bold px-10 py-4 rounded-xl text-lg shadow-[0_0_30px_rgba(0,219,240,0.3)] hover:scale-105 transition-all">Open Live Monitor</button>
+          <button
+            onClick={() => navigate('/map')}
+            className="bg-primary text-on-primary font-bold px-10 py-4 rounded-xl text-lg shadow-[0_0_30px_rgba(0,219,240,0.3)] hover:scale-105 transition-all"
+          >
+            Open Live Monitor
+          </button>
           <button className="border border-primary/40 text-primary font-bold px-10 py-4 rounded-xl text-lg glass-primary hover:bg-primary/10 transition-all">How It Works</button>
         </div>
         

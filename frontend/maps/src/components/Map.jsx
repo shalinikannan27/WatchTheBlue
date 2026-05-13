@@ -118,7 +118,6 @@ export default function Map() {
     return (
         <div style={{ display: 'flex', height: '100%', width: '100%', position: 'relative' }}>
             <div style={{ height: '100%', width: '100%', position: 'relative' }}>
-            <h1 className="classic-map-title">WatchTheBlue</h1>
 
             <div className="classic-legend">
                 {[
