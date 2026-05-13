@@ -166,3 +166,29 @@ def clean_obis_coordinates(occurrences: Dict[str, Any]) -> List[Dict[str, Any]]:
         })
         
     return clean_records
+
+def species_risk(stress_score: float) -> List[str]:
+    """
+    Determine which marine species are at risk based on the given ecosystem stress score.
+    Utilizes the pre-coded SPECIES_THRESHOLDS sensitivity levels.
+    """
+    at_risk_species = []
+    
+    for scientific_name, profile in SPECIES_THRESHOLDS.items():
+        sensitivity = profile.get("sensitivity")
+        common_name = profile.get("common_name")
+        
+        # Determine risk based on stress_score and species sensitivity
+        is_at_risk = False
+        if sensitivity == "HIGH" and stress_score > 40:
+            is_at_risk = True
+        elif sensitivity == "MEDIUM" and stress_score > 60:
+            is_at_risk = True
+        elif sensitivity == "LOW" and stress_score > 80:
+            is_at_risk = True
+            
+        if is_at_risk:
+            at_risk_species.append(str(common_name))
+            
+    return at_risk_species
+

@@ -14,6 +14,7 @@ from obis_fetch import get_species_by_location
 from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
 from cmems_fetch import fetch_cmems_with_fallback
 from stress_score import calculate_marine_stress, get_species_stress_impact
+from species_logic import species_risk
 
 app = FastAPI(
     title="WatchTheBlue API Backend",
@@ -217,6 +218,77 @@ def get_habitat_suitability(
         "species_occurrences": species_vulnerability,
         "species_count": species_data.get("count", 0),
         "data_source": species_data.get("source", "OBIS API")
+    }
+def get_zone_name(lat: float, lon: float) -> str:
+    if 8 <= lat <= 12 and 71 <= lon <= 74:
+        return "Lakshadweep"
+    elif 6 <= lat <= 14 and 92 <= lon <= 94:
+        return "Andaman and Nicobar"
+    elif 8 <= lat <= 25 and 65 <= lon <= 77:
+        return "Arabian Sea"
+    elif 8 <= lat <= 22 and 78 <= lon <= 90:
+        return "Bay of Bengal"
+    elif -20 <= lat <= 30 and 40 <= lon <= 100:
+        return "Indian Ocean"
+    else:
+        return "Open Ocean"
+
+@app.get("/api/zone")
+def get_zone(lat: float, lon: float):
+    zone_name = get_zone_name(lat, lon)
+    
+    noaa_res = fetch_noaa_with_fallback(lat, lon)
+    cmems_res = fetch_cmems_with_fallback(lat, lon)
+    
+    sst = noaa_res.get("sst_celsius", 29.0)
+    dhw = noaa_res.get("degree_heating_weeks", 0.0)
+    hotspot = noaa_res.get("hotspot_anomaly", 0.0)
+    
+    ph = cmems_res.get("ph", 7.8)
+    salinity = cmems_res.get("salinity_psu", 35.0)
+    chlorophyll = cmems_res.get("chlorophyll_mg_m3", 0.1)
+    current_speed = cmems_res.get("current_velocity_ms", 0.15)
+    
+    stress_analysis = calculate_marine_stress(
+        sst=sst,
+        hotspot_anomaly=hotspot,
+        degree_heating_weeks=dhw,
+        ph=ph,
+        salinity=salinity,
+        chlorophyll=chlorophyll,
+        current_speed=current_speed
+    )
+    
+    stress = stress_analysis.get("overall_stress_score", 72)
+    
+    if stress > 70:
+        risk_level = "High"
+    elif stress > 40:
+        risk_level = "Medium"
+    else:
+        risk_level = "Low"
+        
+    conditions = {
+        "temperature": round(sst, 1),
+        "oxygen": 4.5,
+        "ph": round(ph, 1)
+    }
+
+    at_risk = species_risk(stress)
+    
+    # Ensure example species are included if stress is high as requested
+    if stress > 70:
+        if "Olive Ridley Turtle" not in at_risk:
+            at_risk.append("Olive Ridley Turtle")
+        if "Spinner Dolphin" not in at_risk:
+            at_risk.append("Spinner Dolphin")
+
+    return {
+        "zone": zone_name,
+        "stress_score": stress,
+        "risk_level": risk_level,
+        "conditions": conditions,
+        "species_at_risk": at_risk
     }
 
 if __name__ == "__main__":
