@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>WatchTheBlue | Cinematic Marine Intelligence</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Hanken+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "inverse-surface": "#cbe6ff",
+            "tertiary": "#b5ffeb",
+            "on-primary-fixed-variant": "#004f57",
+            "tertiary-container": "#20eecc",
+            "outline": "#849396",
+            "error": "#ffb4ab",
+            "on-error": "#690005",
+            "on-tertiary": "#00382e",
+            "on-secondary-fixed-variant": "#7e2c00",
+            "surface": "#001524",
+            "outline-variant": "#3b494c",
+            "primary-container": "#1de9ff",
+            "secondary": "#ffb598",
+            "background": "#001524",
+            "secondary-fixed-dim": "#ffb598",
+            "surface-bright": "#213c50",
+            "on-secondary-container": "#ffddd1",
+            "surface-container-low": "#001e30",
+            "on-background": "#cbe6ff",
+            "tertiary-fixed-dim": "#00dfbf",
+            "primary-fixed-dim": "#00dbf0",
+            "secondary-container": "#b14101",
+            "tertiary-fixed": "#3ffddb",
+            "error-container": "#93000a",
+            "primary-fixed": "#94f1ff",
+            "surface-container-lowest": "#00101c",
+            "surface-container-high": "#0f2c40",
+            "surface-container-highest": "#1c374b",
+            "surface-dim": "#001524",
+            "on-secondary": "#591d00",
+            "on-tertiary-fixed": "#00201a",
+            "on-tertiary-fixed-variant": "#005144",
+            "on-secondary-fixed": "#360f00",
+            "surface-tint": "#00dbf0",
+            "on-surface-variant": "#bac9cc",
+            "inverse-on-surface": "#173347",
+            "on-surface": "#cbe6ff",
+            "on-primary-container": "#006570",
+            "on-tertiary-container": "#006858",
+            "secondary-fixed": "#ffdbcd",
+            "primary": "#cdf8ff",
+            "surface-container": "#022235",
+            "surface-variant": "#1c374b",
+            "on-primary": "#00363c",
+            "on-primary-fixed": "#001f24",
+            "inverse-primary": "#006973",
+            "on-error-container": "#ffdad6"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          spacing: {
+            "margin-desktop": "64px",
+            "container-max": "1440px",
+            "margin-mobile": "20px",
+            "unit": "4px",
+            "gutter": "24px"
+          },
+          fontFamily: {
+            "body-sm": ["Hanken Grotesk"],
+            "data-point": ["JetBrains Mono"],
+            "headline-lg-mobile": ["Space Grotesk"],
+            "label-caps": ["JetBrains Mono"],
+            "headline-lg": ["Space Grotesk"],
+            "body-md": ["Hanken Grotesk"],
+            "display-xl": ["Space Grotesk"]
+          },
+          fontSize: {
+            "body-sm": ["16px", { lineHeight: "1.5", fontWeight: "400" }],
+            "data-point": ["14px", { lineHeight: "1", fontWeight: "700" }],
+            "headline-lg-mobile": ["32px", { lineHeight: "1.2", fontWeight: "700" }],
+            "label-caps": ["12px", { lineHeight: "1", letterSpacing: "0.1em", fontWeight: "500" }],
+            "headline-lg": ["48px", { lineHeight: "1.2", letterSpacing: "0.02em", fontWeight: "700" }],
+            "body-md": ["18px", { lineHeight: "1.6", letterSpacing: "0.01em", fontWeight: "400" }],
+            "display-xl": ["80px", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "700" }]
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    .glass {
+      background: rgba(0, 21, 36, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-primary {
+      background: rgba(0, 219, 240, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 219, 240, 0.4);
+    }
+    .pulse-aqua {
+      box-shadow: 0 0 0 0 rgba(0, 219, 240, 0.4);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0, 219, 240, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 219, 240, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 219, 240, 0); }
+    }
+    .bioluminescent-glow {
+      filter: drop-shadow(0 0 15px rgba(0, 219, 240, 0.6));
+    }
+    .grid-bg {
+      background-image: linear-gradient(rgba(0, 219, 240, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 219, 240, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+  </style>
+</head>
+
+<body class="bg-background text-on-surface font-body-md overflow-x-hidden">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
