@@ -275,6 +275,35 @@ def api_predict(
         raise HTTPException(status_code=500, detail="Prediction pipeline failed") from exc
 
 
+@app.get("/api/health/prediction")
+def api_prediction_health():
+    """
+    Lightweight health endpoint for frontend preflight status.
+    Checks model artifact availability and one cached-safe inference path.
+    """
+    model_names = get_loaded_model_names()
+    try:
+        sample = run_prediction(13.0, 80.0, use_cache=True)
+        return {
+            "success": True,
+            "status": "online",
+            "message": "Prediction inference available",
+            "model_artifacts_present": bool(model_names),
+            "models_loaded": model_names,
+            "sample_zone": sample.get("zone_display"),
+            "sample_risk_level": sample.get("risk_level"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_prediction_health failed: %s", exc)
+        return {
+            "success": False,
+            "status": "offline",
+            "message": "Prediction inference unavailable",
+            "model_artifacts_present": bool(model_names),
+            "models_loaded": model_names,
+        }
+
+
 @app.get("/api/species-risk")
 def api_species_risk(
     lat: float = Query(..., ge=-90.0, le=90.0),

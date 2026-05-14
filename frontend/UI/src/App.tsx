@@ -395,7 +395,7 @@ function StatItem({ label, value, color }: { label: string, value: string, color
   );
 }
 
-function ZoneCard({ zone, idx }: any) {
+function ZoneCard({ zone, idx, onViewMap }: any) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -427,7 +427,11 @@ function ZoneCard({ zone, idx }: any) {
           <span className="text-white/80">Key:</span> {zone.key} · {zone.ngos} NGO{zone.ngos > 1 ? 's' : ''} active
         </p>
 
-        <button className="flex items-center gap-2 text-[0.65rem] font-black uppercase tracking-[0.15em] text-cyan-400 hover:text-white transition-colors">
+        <button
+          type="button"
+          onClick={onViewMap}
+          className="flex items-center gap-2 text-[0.65rem] font-black uppercase tracking-[0.15em] text-cyan-400 hover:text-white transition-colors"
+        >
           View on Map <ChevronRight className="w-3 h-3" />
         </button>
       </div>
@@ -590,9 +594,6 @@ function App() {
               <a href="#" onClick={() => setCurrentPage(0)} className={`transition-all relative group py-1 px-1 ${currentPage <= 1 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
                 Home
               </a>
-              <a href="#" onClick={() => setCurrentPage(2)} className={`transition-all relative group py-1 px-1 ${currentPage === 2 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
-                Live Monitor
-              </a>
               <a href="#" onClick={() => setCurrentPage(3)} className={`transition-all relative group py-1 px-1 ${currentPage === 3 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
                 Ocean Zones
               </a>
@@ -707,6 +708,27 @@ function App() {
                     </motion.div>
                   ))}
                 </div>
+              </motion.div>
+            )}
+
+            {currentPage === 9 && (
+              <motion.div
+                key="map"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.45, ease: "easeInOut" }}
+                className="w-full h-full"
+              >
+                <Suspense
+                  fallback={
+                    <div className="w-full h-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-[#02182b]/80 flex items-center justify-center text-white/70">
+                      Loading map...
+                    </div>
+                  }
+                >
+                  <MapPage />
+                </Suspense>
               </motion.div>
             )}
 

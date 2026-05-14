@@ -20,6 +20,7 @@ import numpy as np
 from cmems_fetch import fetch_cmems_with_fallback
 from io_zones import IO_ZONES, zone_for_point
 from noaa_fetch import fetch_noaa_with_fallback
+from species_data import species_data
 from species_logic import species_risk
 from stress_score import calculate_marine_stress
 
@@ -191,13 +192,69 @@ def _pseudo_explain(
 
 
 def _stress_to_risk_level(stress: float) -> str:
-    if stress < 25:
+    if stress < 35:
         return "LOW"
-    if stress < 50:
+    if stress < 65:
         return "MODERATE"
-    if stress < 75:
-        return "HIGH"
-    return "CRITICAL"
+    return "HIGH"
+
+
+def _risk_to_badge(risk_level: str) -> str:
+    return {
+        "LOW": "low",
+        "MODERATE": "moderate",
+        "HIGH": "high",
+    }.get(risk_level, "moderate")
+
+
+def _species_profile(name: str) -> Optional[Dict[str, Tuple[float, float]]]:
+    target = name.strip().lower()
+    for key, profile in species_data.items():
+        if key.lower() == target:
+            return profile
+    return None
+
+
+def _metric_penalty(value: float, low: float, high: float, weight: float) -> float:
+    if low <= value <= high:
+        return 0.0
+    span = max(0.1, high - low)
+    diff = (low - value) if value < low else (value - high)
+    # Out-of-range distance normalized by species tolerance span.
+    return min(weight, (diff / span) * weight * 2.5)
+
+
+def _species_threat_score(
+    name: str,
+    zone_stress: float,
+    model_confidence: Optional[float],
+    sst: float,
+    salinity: float,
+    oxygen: float,
+    ph: float,
+) -> float:
+    # Base score anchored by ecosystem stress.
+    score = zone_stress
+    if model_confidence is not None:
+        score = 0.75 * score + 0.25 * (model_confidence * 100.0)
+
+    profile = _species_profile(name)
+    if profile:
+        score += _metric_penalty(sst, *profile["temperature_range"], weight=16.0)
+        score += _metric_penalty(salinity, *profile["salinity_range"], weight=10.0)
+        score += _metric_penalty(oxygen, *profile["oxygen_range"], weight=12.0)
+        score += _metric_penalty(ph, *profile["ph_range"], weight=12.0)
+
+        in_range = (
+            profile["temperature_range"][0] <= sst <= profile["temperature_range"][1]
+            and profile["salinity_range"][0] <= salinity <= profile["salinity_range"][1]
+            and profile["oxygen_range"][0] <= oxygen <= profile["oxygen_range"][1]
+            and profile["ph_range"][0] <= ph <= profile["ph_range"][1]
+        )
+        if in_range:
+            score -= 8.0
+
+    return max(0.0, min(100.0, round(score, 2)))
 
 
 def _risk_probability_from_stress(stress: float) -> float:
@@ -213,17 +270,33 @@ def _species_note_placeholder(name: str) -> str:
     )
 
 
-def _species_cards_from_names(names: List[str], zone_risk: str) -> List[Dict[str, Any]]:
+def _species_cards_from_names(
+    names: List[str],
+    zone_stress: float,
+    sst: float,
+    salinity: float,
+    oxygen: float,
+    ph: float,
+) -> List[Dict[str, Any]]:
     cards = []
-    risk_map = {"LOW": "low", "MODERATE": "moderate", "HIGH": "high", "CRITICAL": "critical"}
-    rk = risk_map.get(zone_risk, "moderate")
     for n in names:
+        threat_score = _species_threat_score(
+            n,
+            zone_stress=zone_stress,
+            model_confidence=None,
+            sst=sst,
+            salinity=salinity,
+            oxygen=oxygen,
+            ph=ph,
+        )
+        rk = _risk_to_badge(_stress_to_risk_level(threat_score))
         cards.append(
             {
                 "name": n,
                 "risk": rk,
                 "ngo": "Indian Ocean marine NGO network",
                 "note": _species_note_placeholder(n),
+                "threat_score": threat_score,
             }
         )
     return cards
@@ -232,12 +305,16 @@ def _species_cards_from_names(names: List[str], zone_risk: str) -> List[Dict[str
 def _merge_species_cards(
     stress_names: List[str],
     ml_cards: List[Dict[str, Any]],
-    zone_risk: str,
+    zone_stress: float,
+    sst: float,
+    salinity: float,
+    oxygen: float,
+    ph: float,
     max_items: int = 6,
 ) -> List[Dict[str, Any]]:
     seen = set()
     out: List[Dict[str, Any]] = []
-    for src in ml_cards + _species_cards_from_names(stress_names, zone_risk):
+    for src in ml_cards + _species_cards_from_names(stress_names, zone_stress, sst, salinity, oxygen, ph):
         key = src["name"]
         if key in seen:
             continue
@@ -336,17 +413,27 @@ def run_prediction(lat: float, lon: float, use_cache: bool = True) -> Dict[str, 
                             continue
                         sp = classes[int(idx)]
                         species_predictions.append({"species": sp, "probability": round(p, 4)})
-                        sp_risk_label = risk_level if p > 0.35 else ("MODERATE" if p > 0.2 else "LOW")
+                        threat_score = _species_threat_score(
+                            sp,
+                            zone_stress=stress,
+                            model_confidence=p,
+                            sst=sst,
+                            salinity=salinity,
+                            oxygen=oxygen_est,
+                            ph=ph,
+                        )
+                        sp_risk_label = _stress_to_risk_level(threat_score)
                         ml_species_cards.append(
                             {
                                 "name": sp,
-                                "risk": sp_risk_label.lower(),
+                                "risk": _risk_to_badge(sp_risk_label),
                                 "ngo": "OBIS occurrence priors · WatchTheBlue",
                                 "note": (
                                     f"RandomForest association p={p:.2f} at this lat/lon with live "
                                     "temperature, salinity, and circulation."
                                 ),
                                 "model_confidence": round(p, 4),
+                                "threat_score": threat_score,
                             }
                         )
                     confidence_score = round(float(np.max(proba)), 4)
@@ -373,7 +460,15 @@ def run_prediction(lat: float, lon: float, use_cache: bool = True) -> Dict[str, 
         for extra in ("Olive Ridley Turtle", "Spinner Dolphin"):
             if extra not in at_risk_names:
                 at_risk_names.append(extra)
-    species_cards = _merge_species_cards(at_risk_names, ml_species_cards, risk_level)
+    species_cards = _merge_species_cards(
+        at_risk_names,
+        ml_species_cards,
+        zone_stress=stress,
+        sst=sst,
+        salinity=salinity,
+        oxygen=oxygen_est,
+        ph=ph,
+    )
 
     zone_meta = zone_for_point(lat, lon)
 
@@ -416,16 +511,14 @@ def build_zone_panel_payload(pred: Dict[str, Any]) -> Dict[str, Any]:
     stress = float(sa.get("overall_stress_score", 0))
     rl = pred["risk_level"]
     stress_level_ui = {
-        "LOW": "healthy",
+        "LOW": "low",
         "MODERATE": "moderate",
         "HIGH": "high",
-        "CRITICAL": "critical",
     }.get(rl, "moderate")
     colors = {
         "LOW": "#22c55e",
         "MODERATE": "#facc15",
-        "HIGH": "#a855f7",
-        "CRITICAL": "#ef4444",
+        "HIGH": "#ef4444",
     }
     stress_color = colors.get(pred["risk_level"], "#38bdf8")
     dhw = float(m.get("degree_heating_weeks", 0))
