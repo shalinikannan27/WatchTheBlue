@@ -105,7 +105,8 @@ def get_species_occurrences(
 def get_species_by_location(
     lat: float,
     lon: float,
-    limit: int = 50
+    limit: int = 50,
+    radius_km: float = 50.0
 ) -> Dict[str, Any]:
     """
     Get species occurrences by location with fallback to simulation.
@@ -117,6 +118,7 @@ def get_species_by_location(
         lat: Latitude (-90 to 90)
         lon: Longitude (-180 to 180)
         limit: Maximum results to return (default 50)
+        radius_km: Search radius in kilometers (default 50.0)
 
     Returns:
         dict: Species occurrences with metadata
@@ -146,7 +148,7 @@ def get_species_by_location(
 
     try:
         # Try real OBIS API
-        api_data = get_species_occurrences(lat, lon, limit=limit)
+        api_data = get_species_occurrences(lat, lon, limit=limit, radius_km=radius_km)
 
         # Parse results
         occurrences = [

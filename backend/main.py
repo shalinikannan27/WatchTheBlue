@@ -15,7 +15,14 @@ load_dotenv()
 # Import local handlers
 from obis_fetch import get_species_by_location
 from noaa_fetch import fetch_noaa_with_fallback, get_bleaching_alert_level
-from cmems_fetch import fetch_cmems_with_fallback
+from cmems_fetch import fetch_cmems_with_fallback, get_ocean_conditions
+try:
+    from drift.drift_model import backward_drift
+except ImportError:
+    backward_drift = None
+from io_zones import IO_ZONES
+from species_data import species_data
+from datetime import datetime, timezone
 from stress_score import calculate_marine_stress, get_species_stress_impact
 from species_logic import species_risk
 from ml_inference import (
@@ -24,6 +31,7 @@ from ml_inference import (
     build_zone_panel_payload,
     zones_risk_overlay,
     get_loaded_model_names,
+    predict_species_risk,
 )
 
 logger = logging.getLogger("main")
@@ -46,7 +54,12 @@ app = FastAPI(
 # Configure CORS for seamless frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production security
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,6 +91,10 @@ def home():
     Root directory metadata
     """
     return {"message": "OceanPulse Backend Running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "model_loaded": len(get_loaded_model_names()) > 0}
 
 @app.get("/api/noaa/sst")
 def get_noaa_sst(
@@ -301,77 +318,156 @@ def api_zone_analysis(
         raise HTTPException(status_code=500, detail="Zone analysis failed") from exc
 
 
-def get_zone_name(lat: float, lon: float) -> str:
-    if 8 <= lat <= 12 and 71 <= lon <= 74:
-        return "Lakshadweep"
-    elif 6 <= lat <= 14 and 92 <= lon <= 94:
-        return "Andaman and Nicobar"
-    elif 8 <= lat <= 25 and 65 <= lon <= 77:
-        return "Arabian Sea"
-    elif 8 <= lat <= 22 and 78 <= lon <= 90:
-        return "Bay of Bengal"
-    elif -20 <= lat <= 30 and 40 <= lon <= 100:
-        return "Indian Ocean"
-    else:
-        return "Open Ocean"
+@app.get("/api/zone/{zone_id}")
+def get_zone_by_id(zone_id: str):
+    zone = next((z for z in IO_ZONES if z["id"] == zone_id), None)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    
+    lat, lon = zone["center"]
+    now = datetime.now(timezone.utc)
+    month = now.month
 
-@app.get("/api/zone")
-def get_zone(lat: float, lon: float):
-    zone_name = get_zone_name(lat, lon)
-    
-    noaa_res = fetch_noaa_with_fallback(lat, lon)
-    cmems_res = fetch_cmems_with_fallback(lat, lon)
-    
-    sst = noaa_res.get("sst_celsius", 29.0)
-    dhw = noaa_res.get("degree_heating_weeks", 0.0)
-    hotspot = noaa_res.get("hotspot_anomaly", 0.0)
-    
-    ph = cmems_res.get("ph", 7.8)
-    salinity = cmems_res.get("salinity_psu", 35.0)
-    chlorophyll = cmems_res.get("chlorophyll_mg_m3", 0.1)
-    current_speed = cmems_res.get("current_velocity_ms", 0.15)
-    
-    stress_analysis = calculate_marine_stress(
-        sst=sst,
-        hotspot_anomaly=hotspot,
-        degree_heating_weeks=dhw,
-        ph=ph,
-        salinity=salinity,
-        chlorophyll=chlorophyll,
-        current_speed=current_speed
-    )
-    
-    stress = stress_analysis.get("overall_stress_score", 72)
-    
-    if stress > 70:
-        risk_level = "High"
-    elif stress > 40:
-        risk_level = "Medium"
-    else:
-        risk_level = "Low"
-        
-    conditions = {
-        "temperature": round(sst, 1),
-        "oxygen": 4.5,
-        "ph": round(ph, 1)
-    }
+    conds = get_ocean_conditions(lat, lon)
+    temp = conds.get("temperature", 28.0)
+    sal = conds.get("salinity", 35.0)
+    o2 = conds.get("oxygen", 5.0)
+    ph = conds.get("ph", 8.1)
+    speed = conds.get("current_speed", 0.1)
 
-    at_risk = species_risk(stress)
+    species_risks = []
+    for sp in species_data.keys():
+        risk = predict_species_risk(
+            lat=lat, lon=lon,
+            temperature=temp, salinity=sal, oxygen=o2, ph=ph, current_speed=speed,
+            month=month, species_name=sp
+        )
+        species_risks.append({
+            "species": sp,
+            "risk_level": risk["risk_level"],
+            "risk_probability": risk["risk_probability"],
+            "top_factors": risk["top_factors"]
+        })
     
-    # Ensure example species are included if stress is high as requested
-    if stress > 70:
-        if "Olive Ridley Turtle" not in at_risk:
-            at_risk.append("Olive Ridley Turtle")
-        if "Spinner Dolphin" not in at_risk:
-            at_risk.append("Spinner Dolphin")
+    levels = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4}
+    worst_level_str = "LOW"
+    worst_level_int = 1
+    max_prob = 0.0
+    for r in species_risks:
+        l = levels.get(r["risk_level"], 1)
+        if l > worst_level_int:
+            worst_level_int = l
+            worst_level_str = r["risk_level"]
+        if float(r["risk_probability"]) > max_prob:
+            max_prob = float(r["risk_probability"])
+            
+    stress_score = int(max_prob * 100)
 
     return {
-        "zone": zone_name,
-        "stress_score": stress,
-        "risk_level": risk_level,
-        "conditions": conditions,
-        "species_at_risk": at_risk
+        "zone_id": zone_id,
+        "zone_name": zone["name"],
+        "conditions": conds,
+        "overall_stress": worst_level_str,
+        "stress_score": stress_score,
+        "species_risks": species_risks,
+        "timestamp": now.isoformat()
     }
+
+@app.get("/api/drift")
+def get_drift(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    date: str = Query(..., description="YYYY-MM-DD")
+):
+    if not backward_drift:
+        raise HTTPException(status_code=500, detail="Drift model not available")
+    return backward_drift(lat, lon, date)
+
+@app.get("/api/species/{species_name}")
+def get_species_risk_all_zones(species_name: str):
+    if species_name not in species_data:
+        raise HTTPException(status_code=404, detail="Species not found")
+    
+    now = datetime.now(timezone.utc)
+    month = now.month
+    zone_risks = []
+
+    for z in IO_ZONES:
+        lat, lon = z["center"]
+        conds = get_ocean_conditions(lat, lon)
+        temp = conds.get("temperature", 28.0)
+        sal = conds.get("salinity", 35.0)
+        o2 = conds.get("oxygen", 5.0)
+        ph = conds.get("ph", 8.1)
+        speed = conds.get("current_speed", 0.1)
+
+        risk = predict_species_risk(
+            lat=lat, lon=lon,
+            temperature=temp, salinity=sal, oxygen=o2, ph=ph, current_speed=speed,
+            month=month, species_name=species_name
+        )
+        zone_risks.append({
+            "zone_id": z["id"],
+            "zone_name": z["name"],
+            "risk_level": risk["risk_level"],
+            "risk_probability": risk["risk_probability"],
+            "top_factors": risk["top_factors"]
+        })
+    
+    return {
+        "species": species_name,
+        "timestamp": now.isoformat(),
+        "zones": zone_risks
+    }
+
+@app.get("/api/overview")
+def get_overview():
+    now = datetime.now(timezone.utc)
+    month = now.month
+    overview = []
+
+    for z in IO_ZONES:
+        lat, lon = z["center"]
+        conds = get_ocean_conditions(lat, lon)
+        temp = conds.get("temperature", 28.0)
+        sal = conds.get("salinity", 35.0)
+        o2 = conds.get("oxygen", 5.0)
+        ph = conds.get("ph", 8.1)
+        speed = conds.get("current_speed", 0.1)
+
+        species_risks = []
+        for sp in species_data.keys():
+            risk = predict_species_risk(
+                lat=lat, lon=lon,
+                temperature=temp, salinity=sal, oxygen=o2, ph=ph, current_speed=speed,
+                month=month, species_name=sp
+            )
+            species_risks.append(risk)
+            
+        levels = {"LOW": 1, "MODERATE": 2, "HIGH": 3, "CRITICAL": 4}
+        worst_level_str = "LOW"
+        worst_level_int = 1
+        max_prob = 0.0
+        for r in species_risks:
+            l = levels.get(r["risk_level"], 1)
+            if l > worst_level_int:
+                worst_level_int = l
+                worst_level_str = r["risk_level"]
+            if float(r["risk_probability"]) > max_prob:
+                max_prob = float(r["risk_probability"])
+                
+        stress_score = int(max_prob * 100)
+
+        overview.append({
+            "zone_id": z["id"],
+            "zone_name": z["name"],
+            "overall_stress": worst_level_str,
+            "stress_score": stress_score,
+            "conditions": conds,
+            "timestamp": now.isoformat()
+        })
+
+    return {"zones": overview}
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")

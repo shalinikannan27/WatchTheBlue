@@ -12,7 +12,7 @@ import os
 import logging
 import math
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
@@ -132,6 +132,12 @@ def fetch_cmems_marine_data(
             password=CMEMS_PASSWORD
         )
         
+        # Handle ResponseSubset from copernicusmarine SDK
+        if hasattr(dataset, 'to_xarray'):
+            dataset = dataset.to_xarray()
+        elif isinstance(dataset, list) and len(dataset) > 0:
+            dataset = dataset[0]
+            
         # Parse the NetCDF dataset
         if XARRAY_AVAILABLE and hasattr(dataset, 'data_vars'):
             # Using xarray Dataset
@@ -208,17 +214,13 @@ def _parse_xarray_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
 
 def _parse_netcdf_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
     """
-    Parse raw NetCDF data from CMEMS.
-    
-    Args:
-        dataset: NetCDF file path or dataset
-        lat: Target latitude
-        lon: Target longitude
-        
-    Returns:
-        dict: Extracted ocean conditions
+    Parse NetCDF data from CMEMS, handling both netCDF4 and xarray objects.
     """
     try:
+        # If dataset is an xarray object, use its native selection
+        if hasattr(dataset, 'sel'):
+            return _parse_xarray_data(dataset, lat, lon)
+            
         # If dataset is a file path (string), open it
         if isinstance(dataset, str):
             import netCDF4
@@ -227,22 +229,35 @@ def _parse_netcdf_data(dataset, lat: float, lon: float) -> Dict[str, Any]:
             nc = dataset
         
         # Find nearest grid point
-        lats = nc.variables['latitude'][:]
-        lons = nc.variables['longitude'][:]
+        # Check variable names as they might differ by dataset
+        lat_key = 'latitude' if 'latitude' in nc.variables else 'lat'
+        lon_key = 'longitude' if 'longitude' in nc.variables else 'lon'
+        
+        lats = nc.variables[lat_key][:]
+        lons = nc.variables[lon_key][:]
         
         # Find closest indices
-        lat_idx = (abs(lats - lat)).argmin()
-        lon_idx = (abs(lons - lon)).argmin()
+        import numpy as np
+        lat_idx = (np.abs(lats - lat)).argmin()
+        lon_idx = (np.abs(lons - lon)).argmin()
         
-        # Extract variables - tob and sob are available
-        if 'tob' in nc.variables:
-            temperature_k = float(nc.variables['tob'][0, lat_idx, lon_idx])
+        # Extract variables - handle different possible names
+        temp_key = next((k for k in ['tob', 'thetao', 'temperature'] if k in nc.variables), None)
+        sal_key = next((k for k in ['sob', 'so', 'salinity'] if k in nc.variables), None)
+        
+        if temp_key:
+            val = nc.variables[temp_key][0, lat_idx, lon_idx]
+            # Handle masked arrays
+            if hasattr(val, 'filled'): val = val.filled(np.nan)
+            temperature_k = float(val)
             temperature_c = temperature_k - 273.15 if temperature_k > 100 else temperature_k
         else:
             temperature_c = np.nan
         
-        if 'sob' in nc.variables:
-            salinity = float(nc.variables['sob'][0, lat_idx, lon_idx])
+        if sal_key:
+            val = nc.variables[sal_key][0, lat_idx, lon_idx]
+            if hasattr(val, 'filled'): val = val.filled(np.nan)
+            salinity = float(val)
         else:
             salinity = np.nan
         
@@ -425,3 +440,94 @@ def _simulate_ocean_conditions(
         "data_date": date_str or datetime.now().strftime("%Y-%m-%d"),
         "note": "Using realistic simulation. Real CMEMS data not available."
     }
+
+def get_ocean_conditions(lat: float, lon: float) -> Dict[str, Any]:
+    """
+    Fetch ocean conditions required by the ML model using CMEMS subsetting.
+    """
+    import math
+    from datetime import datetime, timezone
+    
+    FALLBACK_CONDITIONS = {
+        "temperature": 28.2, "salinity": 34.1, "oxygen": 5.8,
+        "ph": 8.1, "current_speed": 0.32, "current_u": 0.21,
+        "current_v": 0.24, "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source": "fallback"
+    }
+    
+    try:
+        if not CMEMS_USERNAME or not CMEMS_PASSWORD or not CMEMS_AVAILABLE:
+            return FALLBACK_CONDITIONS
+
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%Y-%m-%d")
+        start_dt = f"{date_str}T00:00:00"
+        end_dt = f"{date_str}T23:59:59"
+        
+        # PHY Dataset
+        phy_ds = copernicusmarine.subset(
+            dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m",
+            variables=["thetao", "so", "uo", "vo"],
+            minimum_longitude=lon - 0.5,
+            maximum_longitude=lon + 0.5,
+            minimum_latitude=lat - 0.5,
+            maximum_latitude=lat + 0.5,
+            start_datetime=start_dt,
+            end_datetime=end_dt,
+            username=CMEMS_USERNAME,
+            password=CMEMS_PASSWORD,
+            force_download=True
+        )
+        
+        # BGC Dataset
+        bgc_ds = copernicusmarine.subset(
+            dataset_id="cmems_mod_glo_bgc_anfc_0.25deg_P1D-m",
+            variables=["o2", "ph"],
+            minimum_longitude=lon - 0.5,
+            maximum_longitude=lon + 0.5,
+            minimum_latitude=lat - 0.5,
+            maximum_latitude=lat + 0.5,
+            start_datetime=start_dt,
+            end_datetime=end_dt,
+            username=CMEMS_USERNAME,
+            password=CMEMS_PASSWORD,
+            force_download=True
+        )
+
+        if not XARRAY_AVAILABLE or not hasattr(phy_ds, 'data_vars'):
+            return FALLBACK_CONDITIONS
+            
+        phy_nearest = phy_ds.sel(latitude=lat, longitude=lon, method="nearest")
+        if "time" in phy_nearest.dims:
+            phy_nearest = phy_nearest.isel(time=0)
+        if "depth" in phy_nearest.dims:
+            phy_nearest = phy_nearest.isel(depth=0)
+        elif "elevation" in phy_nearest.dims:
+            phy_nearest = phy_nearest.isel(elevation=0)
+
+        bgc_nearest = bgc_ds.sel(latitude=lat, longitude=lon, method="nearest")
+        if "time" in bgc_nearest.dims:
+            bgc_nearest = bgc_nearest.isel(time=0)
+        if "depth" in bgc_nearest.dims:
+            bgc_nearest = bgc_nearest.isel(depth=0)
+        elif "elevation" in bgc_nearest.dims:
+            bgc_nearest = bgc_nearest.isel(elevation=0)
+
+        uo = float(phy_nearest["uo"].values)
+        vo = float(phy_nearest["vo"].values)
+        speed = math.sqrt(uo**2 + vo**2)
+
+        return {
+            "temperature": float(phy_nearest["thetao"].values),
+            "salinity": float(phy_nearest["so"].values),
+            "oxygen": float(bgc_nearest["o2"].values),
+            "ph": float(bgc_nearest["ph"].values),
+            "current_speed": speed,
+            "current_u": uo,
+            "current_v": vo,
+            "timestamp": now.isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"get_ocean_conditions failed: {e}")
+        return FALLBACK_CONDITIONS

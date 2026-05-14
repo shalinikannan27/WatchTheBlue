@@ -140,15 +140,15 @@ def fetch_noaa_sst_data(lat: float, lon: float) -> Dict[str, Any]:
         logger.info(f"Fetching NOAA SST data for Lat={lat}, Lon={lon}")
         
         # NOAA ERDDAP endpoint for MUR SST data
-        # Using .json format for easy parsing
         url = f"{ERDDAP_BASE_URL}/jplMURSST41.json"
         
         # Query the nearest grid point at the latest time
-        params = {
-            f"analysed_sst[(last)][({lat}):{lat}][({lon}):{lon}]": ""
-        }
+        # ERDDAP syntax for latest time is often just "last" or [(last)]
+        query = f"analysed_sst[(last)][({lat}):{lat}][({lon}):{lon}]"
+        full_url = f"{url}?{query}"
         
-        response = requests.get(url, params=params, timeout=10)
+        logger.info(f"Requesting URL: {full_url}")
+        response = requests.get(full_url, timeout=25)
         response.raise_for_status()
         
         data = response.json()

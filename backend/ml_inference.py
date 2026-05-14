@@ -152,7 +152,7 @@ def _build_feature_row(
         "current_speed": current_speed,
         "health_score": health_score,
     }
-    vec = [float(row.get(name, 0.0)) for name in feature_names]
+    vec = [row.get(name, 0.0) for name in feature_names]
     return np.array([vec], dtype=np.float64)
 
 
@@ -203,7 +203,7 @@ def _stress_to_risk_level(stress: float) -> str:
 def _risk_probability_from_stress(stress: float) -> float:
     """Calibrated 0–1 index from ecosystem stress (not a clinical probability)."""
     x = min(100.0, max(0.0, stress)) / 100.0
-    return round(float(min(0.99, 0.04 + 0.96 * (x**1.15))), 4)
+    return round(min(0.99, 0.04 + 0.96 * (x**1.15)), 4)
 
 
 def _species_note_placeholder(name: str) -> str:
@@ -280,7 +280,7 @@ def run_prediction(lat: float, lon: float, use_cache: bool = True) -> Dict[str, 
         current_speed=current_speed,
     )
     stress = float(stress_analysis.get("overall_stress_score", 50.0))
-    health_score = float(max(0.0, min(100.0, 100.0 - stress)))
+    health_score = max(0.0, min(100.0, 100.0 - stress))
 
     risk_level = _stress_to_risk_level(stress)
     risk_probability = _risk_probability_from_stress(stress)
@@ -442,7 +442,7 @@ def build_zone_panel_payload(pred: Dict[str, Any]) -> Dict[str, Any]:
         "zone": pred["zone_id"],
         "zone_display": pred["zone_display"],
         "conditions": conditions,
-        "stress_score": int(round(stress)),
+        "stress_score": round(stress),
         "stress_level": stress_level_ui,
         "stress_color": stress_color,
         "coral_bleaching_alert": coral,
@@ -470,6 +470,123 @@ def zones_risk_overlay() -> Dict[str, Dict[str, Any]]:
         out[z["id"]] = {
             "risk_level": p["risk_level"],
             "risk_probability": p["risk_probability"],
-            "stress_score": int(round(float(p["stress_analysis"].get("overall_stress_score", 0)))),
+            "stress_score": round(float(p["stress_analysis"].get("overall_stress_score", 0))),
         }
     return out
+
+
+def predict_species_risk(lat: float, lon: float, temperature: float, salinity: float,
+                          oxygen: float, ph: float, current_speed: float, month: int, species_name: str) -> Dict[str, Any]:
+    import math
+    from species_data import species_data
+
+    FEATURES = [
+        "decimalLatitude", "decimalLongitude",
+        "temperature", "salinity", "current_speed",
+        "temp_anomaly", "sal_anomaly", "o2_anomaly",
+        "temp_deviation", "o2_deviation", "sal_deviation", "ph_deviation",
+        "month_sin", "month_cos"
+    ]
+
+    # Load model
+    model_path = _MODELS_DIR / "stranding_model.pkl"
+    if "stranding_model.pkl" in _loaded_models:
+        model = _loaded_models["stranding_model.pkl"]
+    else:
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+
+    # Load baseline climatology
+    baseline_path = Path(__file__).resolve().parent / "baseline_climatology.json"
+    with open(baseline_path, "r", encoding="utf-8") as f:
+        baseline = json.load(f)
+
+    m_str = str(month)
+    base = baseline.get(m_str, {"temp": 28.0, "sal": 35.0, "o2": 5.0})
+
+    # Compute anomalies vs baseline
+    temp_anomaly = temperature - base.get("temp", 28.0)
+    sal_anomaly = salinity - base.get("sal", 35.0)
+    o2_anomaly = oxygen - base.get("o2", 5.0)
+
+    # Compute tolerance deviations for this species
+    species_info = species_data.get(species_name, {})
+    temp_range = species_info.get("temperature_range", (0, 100))
+    sal_range = species_info.get("salinity_range", (0, 100))
+    o2_range = species_info.get("oxygen_range", (0, 100))
+    ph_range = species_info.get("ph_range", (0, 14))
+
+    def calc_dev(val: float, rng: tuple) -> float:
+        if val < rng[0]:
+            return max(0.0, rng[0] - val)
+        elif val > rng[1]:
+            return max(0.0, val - rng[1])
+        return 0.0
+
+    temp_deviation = calc_dev(temperature, temp_range)
+    sal_deviation = calc_dev(salinity, sal_range)
+    o2_deviation = calc_dev(oxygen, o2_range)
+    ph_deviation = calc_dev(ph, ph_range)
+
+    month_sin = math.sin(2 * math.pi * month / 12.0)
+    month_cos = math.cos(2 * math.pi * month / 12.0)
+
+    from stress_score import calculate_marine_stress
+
+    # 1. Calculate stress to get health_score
+    stress_analysis = calculate_marine_stress(
+        sst=temperature,
+        hotspot_anomaly=temp_anomaly,
+        degree_heating_weeks=0.0,  # Assumption for point prediction
+        ph=ph,
+        salinity=salinity,
+        chlorophyll=0.1,           # Placeholder
+        current_speed=current_speed
+    )
+    stress = float(stress_analysis.get("overall_stress_score", 50.0))
+    health_score = max(0.0, min(100.0, 100.0 - stress))
+
+    feature_vector = [
+        lat, lon,
+        temperature, salinity, current_speed,
+        health_score
+    ]
+
+    x_row = np.array([feature_vector], dtype=np.float64)
+
+    est = _final_estimator(model)
+
+    if hasattr(est, "predict_proba"):
+        proba_arr = est.predict_proba(x_row)[0]
+        risk_probability = float(proba_arr[1]) if len(proba_arr) > 1 else float(proba_arr[0])
+        confidence = float(np.max(proba_arr)) * 100.0
+    else:
+        risk_probability = est.predict(x_row)[0]
+        confidence = 100.0 if risk_probability > 0 else 50.0
+
+    if risk_probability > 0.75:
+        risk_level = "CRITICAL"
+    elif risk_probability > 0.55:
+        risk_level = "HIGH"
+    elif risk_probability > 0.35:
+        risk_level = "MODERATE"
+    else:
+        risk_level = "LOW"
+
+    top_factors = []
+    if hasattr(est, "feature_importances_"):
+        importances = est.feature_importances_
+        indices = np.argsort(importances)[::-1][:3]
+        for idx in indices:
+            top_factors.append({
+                "feature": FEATURES[idx],
+                "impact": importances[idx]
+            })
+
+    return {
+        "species": species_name,
+        "risk_probability": risk_probability,
+        "risk_level": risk_level,
+        "confidence": confidence,
+        "top_factors": top_factors
+    }

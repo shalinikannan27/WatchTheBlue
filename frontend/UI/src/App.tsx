@@ -1,5 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { getAllZones, getSpeciesRisk, getDriftPath } from './api/oceanApi';
+// @ts-ignore
+import MapPage from './maps_components/MapPage';
+import './maps_components/map_styles.css';
 import { 
   Bell, 
   ChevronRight, 
@@ -12,8 +19,20 @@ import {
   Cpu,
   Target,
   History,
-  FileText
+  FileText,
+  Search,
+  Droplets,
+  Wind,
+  FlaskConical
 } from 'lucide-react';
+
+// Fix leaflet icon paths
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const CARDS = [
   {
@@ -237,6 +256,20 @@ function NGOCard({ ngo, idx }: any) {
 }
 
 function SpeciesCard({ species, idx }: any) {
+  const [riskData, setRiskData] = useState<any>(null);
+
+  useEffect(() => {
+    getSpeciesRisk(species.name).then((data) => {
+      const highestZone = data.zones.reduce((prev: any, current: any) => 
+        (prev.risk_probability > current.risk_probability) ? prev : current
+      );
+      setRiskData(highestZone);
+    }).catch(console.error);
+  }, [species.name]);
+
+  const threatVal = riskData ? Math.round(riskData.risk_probability * 100) : species.threat;
+  const isHighRisk = threatVal > 70;
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -271,14 +304,14 @@ function SpeciesCard({ species, idx }: any) {
         <div>
           <div className="flex justify-between items-end mb-2">
             <span className="text-[0.6rem] text-white/60 uppercase font-black tracking-widest">Threat Level</span>
-            <span className={`text-xs font-black ${species.threat > 70 ? 'text-red-400' : 'text-cyan-400'}`}>{species.threat}%</span>
+            <span className={`text-xs font-black ${isHighRisk ? 'text-red-400' : 'text-cyan-400'}`}>{threatVal}%</span>
           </div>
           <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
-              animate={{ width: `${species.threat}%` }}
+              animate={{ width: `${threatVal}%` }}
               transition={{ duration: 1, delay: 0.5 }}
-              className={`h-full rounded-full ${species.threat > 70 ? 'bg-red-400' : 'bg-cyan-400 shadow-[0_0_8px_#06b6d4]'}`}
+              className={`h-full rounded-full ${isHighRisk ? 'bg-red-400' : 'bg-cyan-400 shadow-[0_0_8px_#06b6d4]'}`}
             />
           </div>
         </div>
@@ -407,8 +440,91 @@ function App() {
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0); 
   const [hoveredStep, setHoveredStep] = useState<string | null>(null);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  const bgImage = "/c1b3e851af2b6979c4770070f5e2f779.jpg"; 
+  // Static fallback data — shown immediately while backend loads
+  const STATIC_ZONES = [
+    {
+      zone_id: 'arabian_sea', zone_name: 'Arabian Sea',
+      overall_stress: 'MODERATE', stress_score: 35,
+      conditions: { temperature: 28.1, salinity: 36.0, oxygen: 4.8, ph: 8.11, current_speed: 0.28 },
+      isLive: false
+    },
+    {
+      zone_id: 'bay_of_bengal', zone_name: 'Bay of Bengal',
+      overall_stress: 'HIGH', stress_score: 67,
+      conditions: { temperature: 29.8, salinity: 33.5, oxygen: 3.9, ph: 8.02, current_speed: 0.35 },
+      isLive: false
+    },
+    {
+      zone_id: 'lakshadweep', zone_name: 'Lakshadweep Sea',
+      overall_stress: 'MEDIUM', stress_score: 55,
+      conditions: { temperature: 30.2, salinity: 34.2, oxygen: 4.1, ph: 7.98, current_speed: 0.19 },
+      isLive: false
+    },
+    {
+      zone_id: 'andaman_sea', zone_name: 'Andaman Sea',
+      overall_stress: 'LOW', stress_score: 28,
+      conditions: { temperature: 27.4, salinity: 33.8, oxygen: 5.2, ph: 8.16, current_speed: 0.22 },
+      isLive: false
+    },
+  ];
+
+  const [liveZones, setLiveZones] = useState<any[]>(STATIC_ZONES);
+
+  useEffect(() => {
+    // Fire-and-forget: update zones with real backend data as it arrives
+    // Each zone is fetched independently so they update one by one
+    const ZONE_IDS = [
+      { id: 'arabian_sea',   name: 'Arabian Sea'    },
+      { id: 'bay_of_bengal', name: 'Bay of Bengal'  },
+      { id: 'lakshadweep',   name: 'Lakshadweep Sea'},
+      { id: 'andaman_sea',   name: 'Andaman Sea'    },
+    ];
+
+    const fetchOneZone = async (z: { id: string; name: string }) => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/zone/${z.id}`);
+        if (!res.ok) return;
+        const raw = await res.json();
+        setLiveZones(prev => prev.map(zone =>
+          zone.zone_id === z.id
+            ? {
+                zone_id: z.id,
+                zone_name: raw.zone_name || z.name,
+                overall_stress: raw.overall_stress || 'LOW',
+                stress_score: raw.stress_score ?? 0,
+                conditions: raw.conditions || zone.conditions,
+                isLive: true
+              }
+            : zone
+        ));
+        setBackendOnline(true);
+        setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour12: true }));
+      } catch {
+        // Keep showing static data — no visible error
+      }
+    };
+
+    // Stagger the requests so the UI updates progressively
+    ZONE_IDS.forEach((z, i) => {
+      setTimeout(() => fetchOneZone(z), i * 500);
+    });
+
+    // Refresh every 90s
+    const interval = setInterval(() => {
+      ZONE_IDS.forEach((z, i) => setTimeout(() => fetchOneZone(z), i * 500));
+    }, 90000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const bgImage = "/c1b3e851af2b6979c4770070f5e2f779.jpg";
+  if (currentPage === 9) {
+    return <MapPage onBack={() => setCurrentPage(0)} />;
+  }
+ 
 
   const nextPage = () => setCurrentPage((prev) => {
     if (prev <= 1) return prev === 1 ? 0 : 1;
@@ -495,7 +611,8 @@ function App() {
               <button title="Notifications" className="text-slate-600 hover:text-[#083344] transition-colors p-1 shrink-0">
                 <Bell className="w-5 h-5" />
               </button>
-              <button className="ml-1 px-6 py-1.5 bg-white/80 border border-[#bae6fd] text-[#0284c7] font-bold rounded-full hover:bg-[#0284c7] hover:text-white transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap shrink-0">
+              <button onClick={() => setCurrentPage(9)} className="ml-1 px-6 py-1.5 bg-white/80 border border-[#bae6fd] text-[#0284c7] font-bold rounded-full hover:bg-[#0284c7] hover:text-white transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap shrink-0 flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full ${backendOnline === true ? 'bg-emerald-500' : backendOnline === false ? 'bg-red-500' : 'bg-yellow-400 animate-pulse'}`} />
                 View Map
               </button>
             </motion.nav>
@@ -511,7 +628,7 @@ function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full"
+                className="grid grid-cols-1 lg:grid-cols-12 gap-12 w-full max-w-7xl mx-auto items-center"
               >
                 <div className="lg:col-span-6 flex flex-col justify-center h-full max-w-2xl">
                   <h1 className="text-4xl md:text-5xl lg:text-6xl font-black mb-2 lg:mb-4 tracking-tight uppercase leading-[0.9] text-[#CCF2F4]">
@@ -600,7 +717,7 @@ function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="w-full flex flex-col items-center justify-center relative"
+                className="w-full max-w-7xl mx-auto flex flex-col items-center justify-center relative h-full"
               >
                 <h2 className="text-center text-2xl lg:text-3xl font-bold tracking-widest text-[#CCF2F4] uppercase mb-8 lg:mb-12 drop-shadow-md">
                   How it works
@@ -635,17 +752,107 @@ function App() {
 
             {currentPage === 2 && (
               <motion.div
-                key="coming-soon"
+                key="live-monitor"
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="flex flex-col items-center justify-center text-center"
+                className="w-full max-w-6xl mx-auto h-[75vh] flex flex-col items-center justify-center"
               >
-                <Radio className="w-12 h-12 lg:w-16 lg:h-16 text-cyan-400 mb-4 lg:mb-6 animate-pulse" />
-                <h2 className="text-4xl lg:text-6xl font-black uppercase tracking-tighter text-white mb-2 lg:mb-4">Live Monitor</h2>
-                <div className="h-[2px] w-16 lg:w-24 bg-cyan-400/30 mb-4 lg:mb-6"></div>
-                <p className="text-cyan-400 font-bold tracking-[0.4em] uppercase text-xs lg:text-sm">Deployment In Progress</p>
-                <p className="text-white/40 text-[0.6rem] lg:text-xs mt-3 lg:mt-4 font-medium uppercase tracking-widest">Real-time Satellite Feed Coming Soon</p>
+                {/* Live Zone Summary Table - Now as a structured grid */}
+                <div className="bg-[#02182b]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col w-full h-full overflow-hidden">
+                  <div className="flex items-center justify-between gap-3 mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-cyan-400/10 rounded-2xl">
+                        <Activity className="w-8 h-8 text-cyan-400 animate-pulse" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-black uppercase tracking-widest text-white">Live Monitor</h2>
+                        <p className="text-white/40 text-[0.6rem] font-bold uppercase tracking-widest mt-1">Real-time oceanographic telemetry from India's blue frontiers</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${backendOnline === true ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : backendOnline === false ? 'bg-red-400' : 'bg-yellow-400 animate-pulse'}`} />
+                        <span className="text-[0.7rem] font-black uppercase tracking-widest text-white">
+                          {backendOnline === true ? 'SYSTEM LIVE' : backendOnline === false ? 'BACKEND OFFLINE' : 'CONNECTING…'}
+                        </span>
+                      </div>
+                      <span className="text-[0.6rem] font-bold uppercase tracking-widest text-white/30">
+                        Last Refreshed · {lastUpdated}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto pr-2">
+                    {liveZones.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-white/50 text-sm">
+                        <Radio className="w-12 h-12 mb-4 animate-spin text-cyan-400 opacity-20" />
+                        <span className="font-black uppercase tracking-[0.2em] opacity-40">Fetching Live Ocean Conditions…</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
+                        {liveZones.map((z, idx) => {
+                          const score = z.stress_score ?? 0;
+                          const barColor = score > 70 ? '#f87171' : score > 40 ? '#fbbf24' : '#34d399';
+                          const badgeClass = score > 70
+                            ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                            : score > 40
+                            ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                            : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+                          const c = z.conditions || {};
+                          return (
+                            <div key={idx} className="bg-white/5 border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:border-cyan-400/30 transition-all hover:bg-white/[0.08] shadow-lg">
+                              <div className="absolute top-0 left-0 w-1.5 h-full rounded-l-2xl" style={{ background: barColor }} />
+                              <div className="flex justify-between items-center pl-3 mb-5">
+                                <div className="flex items-center gap-3">
+                                  <h3 className="font-black text-white text-lg tracking-wide uppercase">{z.zone_name}</h3>
+                                  {z.isLive
+                                    ? <span className="text-[0.5rem] font-black uppercase tracking-widest text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.2)]">● LIVE</span>
+                                    : <span className="text-[0.5rem] font-black uppercase tracking-widest text-white/20 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">SIM</span>
+                                  }
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <span className={`text-[0.7rem] font-black px-3 py-1 rounded-lg border uppercase tracking-wider ${badgeClass}`}>
+                                    {z.overall_stress} · {score}%
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Stress bar */}
+                              <div className="pl-3 mb-6">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-[0.6rem] font-black text-white/30 uppercase tracking-widest">Ecological Stress Index</span>
+                                  <span className="text-[0.6rem] font-black text-white/60 uppercase tracking-widest">{score}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${score}%`, background: barColor, boxShadow: `0 0 10px ${barColor}` }} />
+                                </div>
+                              </div>
+                              
+                              {/* Metrics grid */}
+                              <div className="grid grid-cols-4 gap-4 pl-3">
+                                {[
+                                  { label: 'Temp', val: `${Number(c.temperature ?? 0).toFixed(1)}°C`, icon: <Thermometer className="w-3 h-3" /> },
+                                  { label: 'Salinity', val: `${Number(c.salinity ?? 0).toFixed(1)} PSU`, icon: <Droplets className="w-3 h-3" /> },
+                                  { label: 'Oxygen', val: `${Number(c.oxygen ?? 0).toFixed(1)} mg/L`, icon: <Wind className="w-3 h-3" /> },
+                                  { label: 'pH', val: `${Number(c.ph ?? 0).toFixed(2)}`, icon: <FlaskConical className="w-3 h-3" /> }
+                                ].map((m) => (
+                                  <div key={m.label} className="bg-white/5 rounded-xl p-3 border border-white/5 group-hover:border-white/10 transition-colors">
+                                    <div className="flex items-center gap-1.5 mb-1 text-white/30">
+                                      {m.icon}
+                                      <span className="uppercase text-[0.5rem] font-black tracking-widest">{m.label}</span>
+                                    </div>
+                                    <span className="text-white text-sm font-black tracking-tight">{m.val}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </motion.div>
             )}
 
@@ -656,12 +863,39 @@ function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="w-full max-w-7xl mx-auto"
+                className="w-full max-w-7xl mx-auto flex flex-col h-full justify-center"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-                  {OCEAN_ZONES.map((zone, idx) => (
-                    <ZoneCard key={zone.id} zone={zone} idx={idx} />
-                  ))}
+                <div className="text-center mb-10">
+                  <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-2 block">Oceanic Sectors</span>
+                  <p className="text-white/40 text-[0.6rem] lg:text-[0.7rem] uppercase tracking-[0.3em] font-black whitespace-nowrap">Monitoring high-priority marine conservation zones across the Indian subcontinent.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4">
+                  {OCEAN_ZONES.map((zone, idx) => {
+                    let stressStr = zone.stress;
+                    let color = zone.stressColor;
+                    let dotCol = zone.dotColor;
+
+                    if (liveZones.length > 0) {
+                      const live = liveZones.find((z) => z.zone_name === zone.name || z.zone_name.includes(zone.name.split(' ')[0]));
+                      if (live) {
+                        stressStr = live.overall_stress;
+                        if (live.stress_score > 70) {
+                          color = 'text-red-400';
+                          dotCol = 'bg-red-400';
+                        } else if (live.stress_score > 40) {
+                          color = 'text-yellow-400';
+                          dotCol = 'bg-yellow-400';
+                        } else {
+                          color = 'text-emerald-400';
+                          dotCol = 'bg-emerald-400';
+                        }
+                      }
+                    }
+
+                    return (
+                      <ZoneCard key={zone.id} zone={{...zone, stress: stressStr, stressColor: color, dotColor: dotCol}} idx={idx} />
+                    );
+                  })}
                 </div>
               </motion.div>
             )}
@@ -673,15 +907,13 @@ function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -30 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="w-full max-w-[90rem] mx-auto flex flex-col h-full"
+                className="w-full max-w-7xl mx-auto flex flex-col h-full justify-center"
               >
-                <div className="text-center mb-6">
-                  <p className="text-white/40 text-[0.6rem] lg:text-[0.7rem] uppercase tracking-[0.3em] font-black whitespace-nowrap">
-                    All species loaded dynamically from our marine database. Click any card to track on the live map.
-                  </p>
+                <div className="text-center mb-10">
+                  <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-2 block">Biological Indicators</span>
+                  <p className="text-white/40 text-[0.6rem] lg:text-[0.7rem] uppercase tracking-[0.3em] font-black whitespace-nowrap">Tracking vulnerability and habitat suitability for key indicator species.</p>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 px-4 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4 mb-8">
                   {SPECIES.slice((currentPage - 4) * 4, (currentPage - 4) * 4 + 4).map((species, idx) => (
                     <SpeciesCard key={species.name} species={species} idx={idx} />
                   ))}
@@ -718,7 +950,7 @@ function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="w-full max-w-[90rem] mx-auto flex flex-col h-full"
+                className="w-full max-w-7xl mx-auto flex flex-col h-full justify-center"
               >
                 <div className="text-center mb-6">
                   <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-2 block">Our Conservation Network</span>
@@ -727,7 +959,7 @@ function App() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4 mb-4 flex-1 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 px-4 items-center">
                   {NGO_PARTNERS.map((ngo, idx) => (
                     <NGOCard key={ngo.name} ngo={ngo} idx={idx} />
                   ))}
@@ -742,7 +974,7 @@ function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-12 w-full max-w-7xl mx-auto items-center"
+                className="grid grid-cols-1 lg:grid-cols-12 gap-12 w-full max-w-7xl mx-auto items-center h-full"
               >
                 <div className="lg:col-span-7 flex flex-col justify-center">
                   <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-4 block">Join the Network</span>
