@@ -1,7 +1,0 @@
-project-includes = [
-    "**/*.py*",
-    "**/*.ipynb",
-]
-search_path = ["backend"]
-python-interpreter-path = "C:/Users/USER/AppData/Local/Programs/Python/Python313/python.exe"
-
