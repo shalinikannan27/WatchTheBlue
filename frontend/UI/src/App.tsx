@@ -1,7 +1,6 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Bell, 
   ChevronRight, 
   Radio, 
   MapPin, 
@@ -12,7 +11,8 @@ import {
   Cpu,
   Target,
   History,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 const MapPage = lazy(() => import('./components/map/MapPage.jsx'));
 
@@ -89,57 +89,65 @@ const WORKFLOW_STEPS = [
     title: "ALERT",
     subtitle: "NGO Automation",
     description: "Critical incidents sent to nearby NGOs via WhatsApp/email using agentic workflows.",
-    icon: <Bell className="w-6 h-6 text-white" />
+    icon: <Download className="w-6 h-6 text-white" />
   }
 ];
-const OCEAN_ZONES = [
+const OCEAN_ZONES_DEFAULT = [
   {
     id: '01',
+    zoneApiId: 'lakshadweep',
     name: 'Lakshadweep Sea',
     stress: 'Medium',
-    stressColor: 'text-orange-400',
-    dotColor: 'bg-orange-400',
+    stressColor: 'text-yellow-400',
+    dotColor: 'bg-yellow-400',
     key: 'Coral Reefs, Reef Fish',
-    ngos: 1,
     image: '/species_image/species_image/clownfish.jpg'
   },
   {
     id: '02',
+    zoneApiId: 'andaman_sea',
     name: 'Andaman Sea',
     stress: 'Low',
-    stressColor: 'text-emerald-400',
-    dotColor: 'bg-emerald-400',
+    stressColor: 'text-green-400',
+    dotColor: 'bg-green-400',
     key: 'Dugong, Sea Turtle, Coral',
-    ngos: 1,
     image: '/species_image/species_image/dungoung.jpg'
   },
   {
     id: '03',
+    zoneApiId: 'arabian_sea',
     name: 'Arabian Sea',
-    stress: 'Moderate',
+    stress: 'Medium',
     stressColor: 'text-yellow-400',
     dotColor: 'bg-yellow-400',
     key: 'Whale Shark, Spinner Dolphin',
-    ngos: 1,
     image: '/species_image/species_image/whale shark.jpg'
   },
   {
     id: '04',
+    zoneApiId: 'bay_of_bengal',
     name: 'Bay of Bengal',
     stress: 'High',
     stressColor: 'text-red-400',
     dotColor: 'bg-red-400',
     key: 'Olive Ridley, Humpback Dolphin',
-    ngos: 1,
     image: '/species_image/species_image/Olive ridley sea turtle.jpg'
   }
 ];
+
+const API_BASE = 'http://localhost:8000';
+
+function riskToColors(risk: string) {
+  const r = (risk || '').toUpperCase();
+  if (r === 'LOW') return { text: 'text-green-400', dot: 'bg-green-400', label: 'Low' };
+  if (r === 'HIGH') return { text: 'text-red-400', dot: 'bg-red-400', label: 'High' };
+  return { text: 'text-yellow-400', dot: 'bg-yellow-400', label: 'Medium' };
+}
 
 const NGO_PARTNERS = [
   { 
     name: 'ReefWatch Marine Conservation', 
     impact: 'Coral Restoration & Reef Monitoring', 
-    location: 'Andaman & Nicobar Islands', 
     website: 'https://reefwatchindia.org', 
     image: '/species1.png',
     focus: 'Restoring damaged coral ecosystems and marine life rescue.'
@@ -147,7 +155,6 @@ const NGO_PARTNERS = [
   { 
     name: 'TREE Foundation', 
     impact: 'Sea Turtle Protection & Education', 
-    location: 'Chennai Coast', 
     website: 'https://www.treefoundationindia.org', 
     image: '/species1.png',
     focus: 'Community-led sea turtle conservation and youth education.'
@@ -155,7 +162,6 @@ const NGO_PARTNERS = [
   { 
     name: 'Wildlife Trust of India', 
     impact: 'Species Recovery & Policy', 
-    location: 'Gulf of Kutch & Mithapur', 
     website: 'https://www.wti.org.in', 
     image: '/species2.png',
     focus: 'Conserving wildlife and its habitat through legal and field action.'
@@ -163,7 +169,6 @@ const NGO_PARTNERS = [
   { 
     name: 'Terra Conscious / IUCN India', 
     impact: 'Marine Conservation & Eco-Tourism', 
-    location: 'Goa Coastline', 
     website: 'https://www.terraconscious.com', 
     image: '/species4.png',
     focus: 'Promoting responsible interaction with marine ecosystems.'
@@ -171,7 +176,6 @@ const NGO_PARTNERS = [
   { 
     name: 'Coastal Impact', 
     impact: 'Research & Biodiversity Monitoring', 
-    location: 'Goa & Western Ghats', 
     website: 'https://coastalimpact.in', 
     image: '/species6.png',
     focus: 'Scientific diving and ecosystem health assessments.'
@@ -179,22 +183,21 @@ const NGO_PARTNERS = [
   { 
     name: 'SMRC Kerala', 
     impact: 'Marine Research & Local Governance', 
-    location: 'Cochin, Kerala', 
     website: 'http://www.smrcindia.in', 
     image: '/species3.png',
     focus: 'Linking scientific research with coastal community welfare.'
   },
 ];
 
-const SPECIES = [
-  { name: 'Olive Ridley Turtle', region: 'Bay of Bengal', status: 'Vulnerable', statusColor: 'text-orange-400', temp: '24-30°C', o2: '4-8 mg/L', threat: 82, image: '/species_image/species_image/Olive ridley sea turtle.jpg' },
+const SPECIES_DEFAULT = [
+  { name: 'Olive Ridley Turtle', region: 'Bay of Bengal', status: 'Vulnerable', statusColor: 'text-yellow-400', temp: '24-30°C', o2: '4-8 mg/L', threat: 82, image: '/species_image/species_image/Olive ridley sea turtle.jpg' },
   { name: 'Whale Shark', region: 'Gujarat Coast', status: 'Endangered', statusColor: 'text-red-400', temp: '21-30°C', o2: '3.5-7 mg/L', threat: 45, image: '/species_image/species_image/whale shark.jpg' },
-  { name: 'Dugong', region: 'Andaman Sea', status: 'Protected', statusColor: 'text-emerald-400', temp: '23-30°C', o2: '4-7 mg/L', threat: 68, image: '/species_image/species_image/dungoung.jpg' },
-  { name: 'Spinner Dolphin', region: 'Lakshadweep', status: 'Vulnerable', statusColor: 'text-orange-400', temp: '24-29°C', o2: '5-8 mg/L', threat: 55, image: '/species_image/species_image/spinner dolphin.jpg' },
-  { name: 'Humpback Whale', region: 'Arabian Sea', status: 'Recovering', statusColor: 'text-blue-400', temp: '18-28°C', o2: '5-9 mg/L', threat: 35, image: '/species_image/species_image/humpback whale.jpg' },
-  { name: 'Manta Ray', region: 'Lakshadweep', status: 'Vulnerable', statusColor: 'text-orange-400', temp: '24-30°C', o2: '4-8 mg/L', threat: 60, image: '/species_image/species_image/manta ray.jpg' },
+  { name: 'Dugong', region: 'Andaman Sea', status: 'Protected', statusColor: 'text-green-400', temp: '23-30°C', o2: '4-7 mg/L', threat: 68, image: '/species_image/species_image/dungoung.jpg' },
+  { name: 'Spinner Dolphin', region: 'Lakshadweep', status: 'Vulnerable', statusColor: 'text-yellow-400', temp: '24-29°C', o2: '5-8 mg/L', threat: 55, image: '/species_image/species_image/spinner dolphin.jpg' },
+  { name: 'Humpback Whale', region: 'Arabian Sea', status: 'Recovering', statusColor: 'text-green-400', temp: '18-28°C', o2: '5-9 mg/L', threat: 35, image: '/species_image/species_image/humpback whale.jpg' },
+  { name: 'Manta Ray', region: 'Lakshadweep', status: 'Vulnerable', statusColor: 'text-yellow-400', temp: '24-30°C', o2: '4-8 mg/L', threat: 60, image: '/species_image/species_image/manta ray.jpg' },
   { name: 'Reef Shark', region: 'Andaman Sea', status: 'Near Threatened', statusColor: 'text-yellow-400', temp: '22-30°C', o2: '4-7 mg/L', threat: 50, image: '/species_image/species_image/reef shark.jpg' },
-  { name: 'Clownfish', region: 'Gulf of Kutch', status: 'Declining', statusColor: 'text-slate-400', temp: '26-30°C', o2: '5-8 mg/L', threat: 40, image: '/species_image/species_image/clownfish.jpg' },
+  { name: 'Clownfish', region: 'Gulf of Kutch', status: 'Declining', statusColor: 'text-yellow-400', temp: '26-30°C', o2: '5-8 mg/L', threat: 40, image: '/species_image/species_image/clownfish.jpg' },
   { name: 'Blue Whale', region: 'Deep Indian Ocean', status: 'Endangered', statusColor: 'text-red-400', temp: '15-25°C', o2: '6-9 mg/L', threat: 30, image: '/species_image/species_image/blue whale.jpg' },
   { name: 'Green Sea Turtle', region: 'Lakshadweep', status: 'Endangered', statusColor: 'text-red-400', temp: '24-30°C', o2: '4-7 mg/L', threat: 75, image: '/species_image/species_image/Green sea turtle.jpg' },
 ];
@@ -210,10 +213,6 @@ function NGOCard({ ngo, idx }: any) {
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start gap-4">
           <h3 className="text-lg font-black text-white tracking-tight leading-tight group-hover:text-cyan-400 transition-colors">{ngo.name}</h3>
-          <div className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 bg-cyan-400/10 rounded-full border border-cyan-400/20">
-            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee]" />
-            <p className="text-[0.55rem] text-cyan-400 font-black uppercase tracking-wider">{ngo.location.split(',')[0]}</p>
-          </div>
         </div>
 
         <div className="mt-1">
@@ -237,7 +236,10 @@ function NGOCard({ ngo, idx }: any) {
   );
 }
 
-function SpeciesCard({ species, idx }: any) {
+function SpeciesCard({ species, idx, onTrack }: any) {
+  const threatColor = species.threat > 65 ? 'text-red-400' : species.threat > 35 ? 'text-yellow-400' : 'text-green-400';
+  const threatBarColor = species.threat > 65 ? 'bg-red-400' : species.threat > 35 ? 'bg-yellow-400 shadow-[0_0_8px_#facc15]' : 'bg-green-400 shadow-[0_0_8px_#22c55e]';
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -272,19 +274,22 @@ function SpeciesCard({ species, idx }: any) {
         <div>
           <div className="flex justify-between items-end mb-2">
             <span className="text-[0.6rem] text-white/60 uppercase font-black tracking-widest">Threat Level</span>
-            <span className={`text-xs font-black ${species.threat > 70 ? 'text-red-400' : 'text-cyan-400'}`}>{species.threat}%</span>
+            <span className={`text-xs font-black ${threatColor}`}>{species.threat}%</span>
           </div>
           <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${species.threat}%` }}
               transition={{ duration: 1, delay: 0.5 }}
-              className={`h-full rounded-full ${species.threat > 70 ? 'bg-red-400' : 'bg-cyan-400 shadow-[0_0_8px_#06b6d4]'}`}
+              className={`h-full rounded-full ${threatBarColor}`}
             />
           </div>
         </div>
 
-        <button className="mt-2 w-full py-2.5 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-[0.6rem] font-black uppercase tracking-[0.2em] text-white hover:bg-white/10 transition-all group/btn">
+        <button 
+          onClick={() => onTrack && onTrack(species)}
+          className="mt-2 w-full py-2.5 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-[0.6rem] font-black uppercase tracking-[0.2em] text-white hover:bg-cyan-400/20 hover:border-cyan-400/40 transition-all group/btn"
+        >
           <MapPin className="w-3 h-3 text-cyan-400 group-hover/btn:scale-125 transition-transform" />
           Live Tracking
         </button>
@@ -392,7 +397,7 @@ function ZoneCard({ zone, idx, onViewMap }: any) {
         </div>
 
         <p className="text-[0.7rem] text-white/60 leading-relaxed font-medium mb-6">
-          <span className="text-white/80">Key:</span> {zone.key} · {zone.ngos} NGO{zone.ngos > 1 ? 's' : ''} active
+          <span className="text-white/80">Key:</span> {zone.key}
         </p>
 
         <button
@@ -412,6 +417,82 @@ function App() {
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0); 
   const [hoveredStep, setHoveredStep] = useState<string | null>(null);
+  const [oceanZones, setOceanZones] = useState(OCEAN_ZONES_DEFAULT);
+  const [speciesList, setSpeciesList] = useState(SPECIES_DEFAULT);
+  const [downloadZone, setDownloadZone] = useState('all');
+  const [downloading, setDownloading] = useState(false);
+
+  // Fetch zone stress data from ML model
+  useEffect(() => {
+    fetch(`${API_BASE}/api/zones-overview`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.zones) {
+          setOceanZones(prev => prev.map(zone => {
+            const ml = data.zones[zone.zoneApiId];
+            if (!ml) return zone;
+            const colors = riskToColors(ml.risk_level);
+            return {
+              ...zone,
+              stress: colors.label,
+              stressColor: colors.text,
+              dotColor: colors.dot,
+              key: ml.key_species || zone.key,
+            };
+          }));
+        }
+      })
+      .catch(err => console.warn('[WatchTheBlue] zones-overview fetch failed:', err));
+  }, []);
+
+  // Fetch species threat scores from ML model
+  useEffect(() => {
+    fetch(`${API_BASE}/api/species-threat-scores`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.species) {
+          const scoreMap: Record<string, any> = {};
+          data.species.forEach((s: any) => { scoreMap[s.name] = s; });
+          setSpeciesList(prev => prev.map(sp => {
+            const ml = scoreMap[sp.name];
+            if (!ml) return sp;
+            const colors = riskToColors(ml.risk);
+            return {
+              ...sp,
+              threat: Math.round(ml.threat_score),
+              statusColor: colors.text,
+            };
+          }));
+        }
+      })
+      .catch(err => console.warn('[WatchTheBlue] species-threat-scores fetch failed:', err));
+  }, []);
+
+  const handleSpeciesTrack = useCallback((_species: any) => {
+    setCurrentPage(9);
+  }, []);
+
+  const handleDownloadPredictions = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const url = `${API_BASE}/api/download-predictions?zone_id=${downloadZone}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `watchtheblue_predictions_${downloadZone}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error('[WatchTheBlue] Download failed:', err);
+      alert('Download failed. Please ensure the backend is running.');
+    } finally {
+      setDownloading(false);
+    }
+  }, [downloadZone]);
 
   const bgImage = "/c1b3e851af2b6979c4770070f5e2f779.jpg"; 
   const openMapView = () => setCurrentPage(9);
@@ -490,14 +571,9 @@ function App() {
                 NGO Partners
               </a>
               <a href="#" onClick={() => setCurrentPage(8)} className={`transition-all relative group py-1 px-1 ${currentPage === 8 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
-                Join
+                Download
               </a>
               
-              <div className="w-[1px] h-5 bg-slate-300 mx-1 shrink-0"></div>
-              
-              <button title="Notifications" className="text-slate-600 hover:text-[#083344] transition-colors p-1 shrink-0">
-                <Bell className="w-5 h-5" />
-              </button>
                 <button
                   type="button"
                   onClick={openMapView}
@@ -671,7 +747,7 @@ function App() {
                 className="w-full max-w-7xl mx-auto"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-                  {OCEAN_ZONES.map((zone, idx) => (
+                  {oceanZones.map((zone, idx) => (
                     <ZoneCard key={zone.id} zone={zone} idx={idx} onViewMap={openMapView} />
                   ))}
                 </div>
@@ -693,32 +769,34 @@ function App() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 px-4 mb-8">
-                  {SPECIES.slice((currentPage - 4) * 4, (currentPage - 4) * 4 + 4).map((species, idx) => (
-                    <SpeciesCard key={species.name} species={species} idx={idx} />
-                  ))}
-                </div>
-
-                <div className="flex justify-center items-center gap-8 mt-auto pb-4">
+                <div className="flex items-center gap-4 flex-1 px-2">
                   <button 
                     title="Previous Page"
                     onClick={prevPage}
-                    className="text-white/60 hover:text-cyan-400 transition-all hover:scale-125 active:scale-95"
+                    className="text-white/40 hover:text-cyan-400 transition-all hover:scale-125 active:scale-95 shrink-0 p-2"
                   >
-                    <ChevronRight className="w-5 h-5 rotate-180" />
+                    <ChevronRight className="w-7 h-7 rotate-180" />
                   </button>
-                  <div className="flex gap-3">
-                    <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 4 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
-                    <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 5 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
-                    <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 6 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 flex-1">
+                    {speciesList.slice((currentPage - 4) * 4, (currentPage - 4) * 4 + 4).map((species, idx) => (
+                      <SpeciesCard key={species.name} species={species} idx={idx} onTrack={handleSpeciesTrack} />
+                    ))}
                   </div>
+
                   <button 
                     title="Next Page"
                     onClick={nextPage}
-                    className="text-white/60 hover:text-cyan-400 transition-all hover:scale-125 active:scale-95"
+                    className="text-white/40 hover:text-cyan-400 transition-all hover:scale-125 active:scale-95 shrink-0 p-2"
                   >
-                    <ChevronRight className="w-5 h-5" />
+                    <ChevronRight className="w-7 h-7" />
                   </button>
+                </div>
+
+                <div className="flex justify-center items-center gap-3 mt-auto pb-4">
+                  <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 4 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
+                  <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 5 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
+                  <div className={`w-12 h-[3px] transition-all duration-500 rounded-full ${currentPage === 6 ? 'bg-cyan-400 shadow-[0_0_12px_#22d3ee]' : 'bg-white/10'}`} />
                 </div>
               </motion.div>
             )}
@@ -749,7 +827,7 @@ function App() {
             
             {currentPage === 8 && (
               <motion.div
-                key="join"
+                key="download"
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -50 }}
@@ -757,66 +835,73 @@ function App() {
                 className="grid grid-cols-1 lg:grid-cols-12 gap-12 w-full max-w-7xl mx-auto items-center"
               >
                 <div className="lg:col-span-7 flex flex-col justify-center">
-                  <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-4 block">Join the Network</span>
+                  <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-4 block">Prediction Reports</span>
                   <h2 className="text-4xl lg:text-6xl font-black text-white tracking-tight uppercase leading-[0.9] mb-8">
-                    Get Ocean Alerts <br /> Before <br /> Disaster Strikes.
+                    Download <br /> Current <br /> Predictions.
                   </h2>
                   
                   <p className="text-white/60 text-sm lg:text-base leading-relaxed max-w-lg mb-12">
-                    Join a network of marine scientists, NGOs, and citizen responders dedicated to immediate ocean intervention. Choose your mission profile.
+                    Access the latest ML-generated risk predictions, ocean stress scores, and species vulnerability assessments for any zone across the Indian Ocean.
                   </p>
 
                   <div className="flex gap-6">
                     <div className="bg-[#02182b]/40 backdrop-blur-md border border-white/5 p-6 rounded-2xl flex-1">
-                      <div className="text-2xl font-black text-white mb-1">2,400+</div>
-                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">Network Members</div>
+                      <div className="text-2xl font-black text-white mb-1">4</div>
+                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">Ocean Zones</div>
                     </div>
                     <div className="bg-[#02182b]/40 backdrop-blur-md border border-white/5 p-6 rounded-2xl flex-1">
-                      <div className="text-2xl font-black text-white mb-1">340</div>
-                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">Alerts Sent</div>
+                      <div className="text-2xl font-black text-white mb-1">10</div>
+                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">Species Tracked</div>
                     </div>
                     <div className="bg-[#02182b]/40 backdrop-blur-md border border-white/5 p-6 rounded-2xl flex-1">
-                      <div className="text-2xl font-black text-white mb-1 text-orange-400">98%</div>
-                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">Response Rate</div>
+                      <div className="text-2xl font-black text-cyan-400 mb-1">Live</div>
+                      <div className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest">ML Predictions</div>
                     </div>
                   </div>
                 </div>
 
                 <div className="lg:col-span-5">
                   <div className="bg-[#02182b]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-                    <div className="flex gap-8 mb-10 border-b border-white/5">
-                      <button className="pb-4 text-[0.65rem] font-black tracking-widest uppercase text-white border-b-2 border-cyan-400">As NGO Partner</button>
-                      <button className="pb-4 text-[0.65rem] font-black tracking-widest uppercase text-white/40 hover:text-white transition-colors">As Citizen Scientist</button>
+                    <div className="mb-8">
+                      <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase block mb-6">Select Zone</span>
                     </div>
 
                     <div className="space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest ml-1">Full Name</label>
-                        <input 
-                          type="text" 
-                          placeholder="Dr. Sarah K." 
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-400/50 transition-colors"
-                        />
+                        <label className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest ml-1">Ocean Zone</label>
+                        <div className="relative">
+                          <select 
+                            value={downloadZone}
+                            onChange={(e) => setDownloadZone(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 pr-12 text-white focus:outline-none focus:border-cyan-400/50 transition-colors appearance-none cursor-pointer"
+                          >
+                          <option value="all" className="bg-[#02182b] text-white">All Zones</option>
+                          <option value="lakshadweep" className="bg-[#02182b] text-white">Lakshadweep Sea</option>
+                          <option value="andaman_sea" className="bg-[#02182b] text-white">Andaman Sea</option>
+                          <option value="arabian_sea" className="bg-[#02182b] text-white">Arabian Sea</option>
+                          <option value="bay_of_bengal" className="bg-[#02182b] text-white">Bay of Bengal</option>
+                        </select>
+                          <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 rotate-90 pointer-events-none" />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest ml-1">Professional Email</label>
-                        <input 
-                          type="email" 
-                          placeholder="sarah@ocean-research.org" 
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-400/50 transition-colors"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[0.55rem] font-black text-white/40 uppercase tracking-widest ml-1">Organization</label>
-                        <input 
-                          type="text" 
-                          placeholder="Marine Research Institute" 
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-3.5 text-white placeholder:text-white/20 focus:outline-none focus:border-cyan-400/50 transition-colors"
-                        />
+
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <p className="text-[0.6rem] text-white/40 uppercase font-black tracking-widest mb-2">Report Contents</p>
+                        <ul className="space-y-2 text-xs text-white/70">
+                          <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span> Stress scores & risk levels</li>
+                          <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></span> Ocean conditions (SST, pH, O₂)</li>
+                          <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span> Species vulnerability data</li>
+                          <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span> ML prediction confidence</li>
+                        </ul>
                       </div>
                       
-                      <button className="w-full mt-4 py-4 bg-cyan-400 text-[#02182b] font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-cyan-300 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(34,211,238,0.3)]">
-                        Request Mission Credentials
+                      <button 
+                        onClick={handleDownloadPredictions}
+                        disabled={downloading}
+                        className="w-full mt-4 py-4 bg-cyan-400 text-[#02182b] font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-cyan-300 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(34,211,238,0.3)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download className="w-4 h-4" />
+                        {downloading ? 'Downloading...' : 'Download Predictions'}
                       </button>
                     </div>
                   </div>

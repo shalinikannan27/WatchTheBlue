@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, Rectangle } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, Rectangle, CircleMarker } from 'react-leaflet'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { divIcon } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -11,8 +11,22 @@ import './map.css'
 const ZONES = [
     { id: 'arabian_sea',   name: 'Arabian Sea',    color: '#22c55e', center: [16, 72], bounds: [[10, 68], [23, 77]] },
     { id: 'bay_of_bengal', name: 'Bay of Bengal',  color: '#facc15', center: [15, 85], bounds: [[10, 80], [20, 90]] },
-    { id: 'lakshadweep',   name: 'Lakshadweep Sea',color: '#a855f7', center: [10, 73], bounds: [[8, 72],  [12, 74]] },
-    { id: 'andaman_sea',   name: 'Andaman Sea',    color: '#ef4444', center: [12, 95], bounds: [[10, 92], [14, 98]] }
+    { id: 'lakshadweep',   name: 'Lakshadweep Sea',color: '#facc15', center: [10, 73], bounds: [[8, 72],  [12, 74]] },
+    { id: 'andaman_sea',   name: 'Andaman Sea',    color: '#22c55e', center: [12, 95], bounds: [[10, 92], [14, 98]] }
+]
+
+// Species and their zone assignments for map display
+const SPECIES_ZONE_MAP = [
+    { name: 'Olive Ridley Turtle', icon: '🐢', zone: 'bay_of_bengal', positions: [[15.2, 84.5], [14.8, 85.3], [16.1, 84.0], [13.5, 86.2]] },
+    { name: 'Whale Shark', icon: '🦈', zone: 'arabian_sea', positions: [[18.0, 70.5], [16.5, 72.0], [20.0, 69.5], [17.2, 71.8]] },
+    { name: 'Dugong', icon: '🌊', zone: 'andaman_sea', positions: [[12.5, 93.5], [11.8, 94.2], [13.0, 93.0]] },
+    { name: 'Spinner Dolphin', icon: '🐬', zone: 'lakshadweep', positions: [[10.2, 73.1], [9.8, 72.8], [10.5, 73.4]] },
+    { name: 'Humpback Whale', icon: '🐋', zone: 'arabian_sea', positions: [[14.5, 70.0], [15.8, 69.5]] },
+    { name: 'Manta Ray', icon: '🦑', zone: 'lakshadweep', positions: [[10.0, 72.5], [9.5, 73.2]] },
+    { name: 'Reef Shark', icon: '🦈', zone: 'andaman_sea', positions: [[12.0, 93.8], [11.5, 94.5]] },
+    { name: 'Clownfish', icon: '🐠', zone: 'arabian_sea', positions: [[19.5, 71.0]] },
+    { name: 'Blue Whale', icon: '🐳', zone: 'arabian_sea', positions: [[13.0, 68.5]] },
+    { name: 'Green Sea Turtle', icon: '🐢', zone: 'lakshadweep', positions: [[10.3, 72.9], [9.9, 73.3]] },
 ]
 
 const SAMPLE_ZONE_DATA = {
@@ -152,6 +166,59 @@ function DriftSpeciesBar({ selected, onSelect }) {
     )
 }
 
+function SpeciesTrackerBar({ selectedSpecies, onSelectSpecies }) {
+    return (
+        <div className="drift-species-bar species-tracker-bar">
+            <span className="drift-bar-label" style={{ color: 'rgba(34, 197, 94, 0.55)' }}>SPECIES TRACKER</span>
+            <select
+                value={selectedSpecies || ''}
+                onChange={e => onSelectSpecies(e.target.value || null)}
+                className="species-tracker-dropdown"
+            >
+                <option value="">All Species</option>
+                {SPECIES_ZONE_MAP.map(s => (
+                    <option key={s.name} value={s.name}>{s.icon} {s.name}</option>
+                ))}
+            </select>
+        </div>
+    )
+}
+
+function SpeciesZoneMarkers({ selectedSpecies }) {
+    const speciesToShow = selectedSpecies
+        ? SPECIES_ZONE_MAP.filter(s => s.name === selectedSpecies)
+        : SPECIES_ZONE_MAP
+
+    return (
+        <>
+            {speciesToShow.map(species =>
+                species.positions.map((pos, i) => (
+                    <CircleMarker
+                        key={`${species.name}-${i}`}
+                        center={pos}
+                        radius={6}
+                        pathOptions={{
+                            color: '#22c55e',
+                            fillColor: '#22c55e',
+                            fillOpacity: 0.7,
+                            weight: 1.5,
+                            opacity: 0.9,
+                        }}
+                    >
+                        <Tooltip>
+                            <div className="drift-tooltip">
+                                <strong>{species.icon} {species.name}</strong>
+                                <span>{pos[0].toFixed(2)}°N, {pos[1].toFixed(2)}°E</span>
+                                <span className="drift-tooltip-status">Zone: {ZONES.find(z => z.id === species.zone)?.name || species.zone}</span>
+                            </div>
+                        </Tooltip>
+                    </CircleMarker>
+                ))
+            )}
+        </>
+    )
+}
+
 function DriftInfoCard({ speciesId }) {
     const species = DRIFT_SPECIES.find(s => s.id === speciesId)
     if (!species) return null
@@ -178,6 +245,7 @@ export default function MapPage() {
     const [selectedData, setSelectedData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [selectedSpeciesId, setSelectedSpeciesId] = useState(null)
+    const [selectedTrackerSpecies, setSelectedTrackerSpecies] = useState(null)
     const [zonesRiskOverlay, setZonesRiskOverlay] = useState(null)
     const [predictionError, setPredictionError] = useState(false)
     const [predictionService, setPredictionService] = useState({ status: 'checking', message: 'Checking prediction service…' })
@@ -291,6 +359,7 @@ export default function MapPage() {
             </header>
 
             <DriftSpeciesBar selected={selectedSpeciesId} onSelect={setSelectedSpeciesId} />
+            <SpeciesTrackerBar selectedSpecies={selectedTrackerSpecies} onSelectSpecies={setSelectedTrackerSpecies} />
 
             <div className="map-body">
                 <div className="map-container-wrap">
@@ -315,6 +384,7 @@ export default function MapPage() {
                         />
 
                         <ZoneRiskOverlays zones={ZONES} overlay={zonesRiskOverlay} />
+                        <SpeciesZoneMarkers selectedSpecies={selectedTrackerSpecies} />
 
                         {ZONES.map(zone => (
                             <Marker
