@@ -80,15 +80,15 @@ const WORKFLOW_STEPS = [
   {
     step: "STEP 6",
     title: "REPORT",
-    subtitle: "PDF Generation",
+    subtitle: "JSON Generation",
     description: "Downloadable reports containing risks, conditions, predictions, and incident analysis.",
     icon: <FileText className="w-6 h-6 text-white" />
   },
   {
     step: "STEP 7",
     title: "ALERT",
-    subtitle: "NGO Automation",
-    description: "Critical incidents sent to nearby NGOs via WhatsApp/email using agentic workflows.",
+  
+    description: "Critical incidents sent to nearby NGOs",
     icon: <Download className="w-6 h-6 text-white" />
   }
 ];
@@ -568,7 +568,7 @@ function App() {
                 Species
               </a>
               <a href="#" onClick={() => setCurrentPage(7)} className={`transition-all relative group py-1 px-1 ${currentPage === 7 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
-                NGO Partners
+                NGO Websites
               </a>
               <a href="#" onClick={() => setCurrentPage(8)} className={`transition-all relative group py-1 px-1 ${currentPage === 8 ? 'text-[#0284c7]' : 'text-slate-600 hover:text-[#083344]'}`}>
                 Download
@@ -732,7 +732,7 @@ function App() {
                 >
                   <StatItem label="Active Zones" value="04" color="cyan" />
                   <StatItem label="Species Tracked" value="10" color="emerald" />
-                  <StatItem label="NGO Partners" value="06" color="orange" />
+                  <StatItem label="NGO Websites" value="06" color="orange" />
                 </motion.div>
               </motion.div>
             )}
@@ -813,7 +813,7 @@ function App() {
                 <div className="text-center mb-6">
                   <span className="text-[0.6rem] font-black tracking-[0.4em] text-cyan-400 uppercase mb-2 block">Our Conservation Network</span>
                   <p className="text-white/40 text-[0.6rem] lg:text-[0.7rem] uppercase tracking-[0.3em] font-black whitespace-nowrap">
-                    Collaborating with India's leading marine organizations to protect our blue frontiers.
+                    Organizations working toward ocean and marine ecosystem conservation.
                   </p>
                 </div>
 
