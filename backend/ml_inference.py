@@ -567,3 +567,121 @@ def zones_risk_overlay() -> Dict[str, Dict[str, Any]]:
             "stress_score": int(round(float(p["stress_analysis"].get("overall_stress_score", 0)))),
         }
     return out
+
+
+# Home sector per species (mirrors frontend MapPage SPECIES_ZONE_MAP)
+SPECIES_HOME_ZONE: Dict[str, str] = {
+    "Olive Ridley Turtle": "bay_of_bengal",
+    "Whale Shark": "arabian_sea",
+    "Dugong": "andaman_sea",
+    "Spinner Dolphin": "lakshadweep",
+    "Humpback Whale": "arabian_sea",
+    "Manta Ray": "lakshadweep",
+    "Reef Shark": "andaman_sea",
+    "Clownfish": "arabian_sea",
+    "Blue Whale": "arabian_sea",
+    "Green Sea Turtle": "lakshadweep",
+}
+
+
+def _model_confidence_for_species(pred: Dict[str, Any], name: str) -> Optional[float]:
+    target = name.strip().lower()
+    for item in pred.get("predicted_species") or []:
+        if str(item.get("species", "")).strip().lower() == target:
+            return item.get("probability")
+    return None
+
+
+def zones_overview_payload() -> Dict[str, Any]:
+    """Stress and key species for all four Indian Ocean sectors (ML + live ocean fields)."""
+    zones: Dict[str, Dict[str, Any]] = {}
+    for z in IO_ZONES:
+        lat, lon = z["center"]
+        pred = run_prediction(lat, lon, use_cache=True)
+        stress = float(pred["stress_analysis"].get("overall_stress_score", 0))
+        cards = pred.get("species_at_risk_cards") or []
+        names = [c["name"] for c in cards[:3]]
+        if not names:
+            names = species_risk(stress)[:3]
+        if not names:
+            names = [n for n, home in SPECIES_HOME_ZONE.items() if home == z["id"]][:3]
+        zones[z["id"]] = {
+            "risk_level": pred["risk_level"],
+            "stress_score": int(round(stress)),
+            "key_species": ", ".join(names),
+        }
+    return {"success": True, "zones": zones}
+
+
+def species_threat_scores_payload() -> Dict[str, Any]:
+    """Threat scores for all monitored species using zone-centered ML predictions."""
+    zone_cache: Dict[str, Dict[str, Any]] = {}
+    species_out: List[Dict[str, Any]] = []
+
+    for name in species_data.keys():
+        zid = SPECIES_HOME_ZONE.get(name, "arabian_sea")
+        if zid not in zone_cache:
+            z = next(item for item in IO_ZONES if item["id"] == zid)
+            lat, lon = z["center"]
+            zone_cache[zid] = run_prediction(lat, lon, use_cache=True)
+
+        pred = zone_cache[zid]
+        stress = float(pred["stress_analysis"].get("overall_stress_score", 0))
+        m = pred["metrics"]
+        sa = pred["stress_analysis"]
+        oxygen = float(sa.get("environmental_summary", {}).get("estimated_oxygen_mg_l", 4.8))
+        conf = _model_confidence_for_species(pred, name)
+        threat = _species_threat_score(
+            name,
+            zone_stress=stress,
+            model_confidence=conf,
+            sst=float(m["sst_celsius"]),
+            salinity=float(m["salinity_psu"]),
+            oxygen=oxygen,
+            ph=float(m["ph"]),
+        )
+        species_out.append(
+            {
+                "name": name,
+                "threat_score": threat,
+                "risk": _stress_to_risk_level(threat),
+                "zone_id": zid,
+            }
+        )
+
+    return {"success": True, "species": species_out}
+
+
+def download_predictions_payload(zone_id: str = "all") -> Dict[str, Any]:
+    """JSON report bundle for frontend download (all zones or one sector)."""
+    from datetime import datetime, timezone
+
+    zone_filter = (zone_id or "all").strip().lower()
+    zones_to_include = list(IO_ZONES)
+    if zone_filter != "all":
+        matched = [z for z in IO_ZONES if z["id"] == zone_filter]
+        if matched:
+            zones_to_include = matched
+
+    species_scores = species_threat_scores_payload()["species"]
+    species_by_zone: Dict[str, List[Dict[str, Any]]] = {}
+    for entry in species_scores:
+        species_by_zone.setdefault(entry["zone_id"], []).append(entry)
+
+    zones_report: Dict[str, Any] = {}
+    for z in zones_to_include:
+        lat, lon = z["center"]
+        pred = run_prediction(lat, lon, use_cache=True)
+        panel = build_zone_panel_payload(pred)
+        zones_report[z["id"]] = {
+            **panel,
+            "species_threat_scores": species_by_zone.get(z["id"], []),
+        }
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "platform": "WatchTheBlue",
+        "zone_filter": zone_filter,
+        "zones": zones_report,
+        "species": species_scores,
+    }

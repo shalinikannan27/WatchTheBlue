@@ -135,7 +135,7 @@ const OCEAN_ZONES_DEFAULT = [
   }
 ];
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 function riskToColors(risk: string) {
   const r = (risk || '').toUpperCase();
@@ -421,6 +421,7 @@ function App() {
   const [speciesList, setSpeciesList] = useState(SPECIES_DEFAULT);
   const [downloadZone, setDownloadZone] = useState('all');
   const [downloading, setDownloading] = useState(false);
+  const [trackedSpecies, setTrackedSpecies] = useState<string | null>(null);
 
   // Fetch zone stress data from ML model
   useEffect(() => {
@@ -468,7 +469,8 @@ function App() {
       .catch(err => console.warn('[WatchTheBlue] species-threat-scores fetch failed:', err));
   }, []);
 
-  const handleSpeciesTrack = useCallback((_species: any) => {
+  const handleSpeciesTrack = useCallback((species: { name: string }) => {
+    setTrackedSpecies(species.name);
     setCurrentPage(9);
   }, []);
 
@@ -692,7 +694,7 @@ function App() {
                     </div>
                   }
                 >
-                  <MapPage />
+                  <MapPage trackSpecies={trackedSpecies} />
                 </Suspense>
               </motion.div>
             )}

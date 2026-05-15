@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, Rectangle, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Tooltip, useMapEvents, useMap, Rectangle, CircleMarker } from 'react-leaflet'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { divIcon } from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -219,6 +219,44 @@ function SpeciesZoneMarkers({ selectedSpecies }) {
     )
 }
 
+function FlyToTrackedSpecies({ speciesName }) {
+    const map = useMap()
+    useEffect(() => {
+        if (!speciesName) return
+        const sp = SPECIES_ZONE_MAP.find(s => s.name === speciesName)
+        if (sp?.positions?.[0]) {
+            map.flyTo(sp.positions[0], 7, { duration: 1.2 })
+        }
+    }, [speciesName, map])
+    return null
+}
+
+function SpeciesTrackingCard({ speciesName }) {
+    if (!speciesName) return null
+    const species = SPECIES_ZONE_MAP.find(s => s.name === speciesName)
+    if (!species) return null
+    const zoneName = ZONES.find(z => z.id === species.zone)?.name || species.zone
+    return (
+        <div
+            className="drift-info-card species-tracking-card"
+            style={{ '--card-color': '#22c55e', '--card-glow': 'rgba(34, 197, 94, 0.45)' }}
+        >
+            <div className="dic-header">
+                <span className="dic-icon">{species.icon}</span>
+                <div>
+                    <p className="dic-name">{species.name}</p>
+                    <p className="dic-status">Live tracking active</p>
+                </div>
+                <span className="dic-risk dic-risk-moderate">TRACK</span>
+            </div>
+            <p className="dic-note">Showing recent occurrence markers in the {zoneName} sector.</p>
+            <div className="dic-coords">
+                <span>📍 {species.positions[0][0].toFixed(2)}°N, {species.positions[0][1].toFixed(2)}°E</span>
+            </div>
+        </div>
+    )
+}
+
 function DriftInfoCard({ speciesId }) {
     const species = DRIFT_SPECIES.find(s => s.id === speciesId)
     if (!species) return null
@@ -241,7 +279,7 @@ function DriftInfoCard({ speciesId }) {
     )
 }
 
-export default function MapPage() {
+export default function MapPage({ trackSpecies = null }) {
     const [selectedData, setSelectedData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [selectedSpeciesId, setSelectedSpeciesId] = useState(null)
@@ -320,6 +358,11 @@ export default function MapPage() {
     }, [])
 
     useEffect(() => {
+        if (!trackSpecies) return
+        setSelectedTrackerSpecies(trackSpecies)
+    }, [trackSpecies])
+
+    useEffect(() => {
         if (!selectedSpeciesId) return undefined
         const sp = DRIFT_SPECIES.find(s => s.id === selectedSpeciesId)
         if (!sp) return undefined
@@ -384,6 +427,7 @@ export default function MapPage() {
                         />
 
                         <ZoneRiskOverlays zones={ZONES} overlay={zonesRiskOverlay} />
+                        <FlyToTrackedSpecies speciesName={selectedTrackerSpecies} />
                         <SpeciesZoneMarkers selectedSpecies={selectedTrackerSpecies} />
 
                         {ZONES.map(zone => (
@@ -409,6 +453,7 @@ export default function MapPage() {
                         <MapClickHandler onZoneSelect={fetchZoneData} />
                     </MapContainer>
 
+                    <SpeciesTrackingCard speciesName={selectedTrackerSpecies} />
                     <DriftInfoCard speciesId={selectedSpeciesId} />
                 </div>
 

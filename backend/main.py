@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
@@ -23,6 +24,9 @@ from ml_inference import (
     run_prediction,
     build_zone_panel_payload,
     zones_risk_overlay,
+    zones_overview_payload,
+    species_threat_scores_payload,
+    download_predictions_payload,
     get_loaded_model_names,
 )
 
@@ -309,6 +313,49 @@ def api_species_risk(
     except Exception as exc:  # noqa: BLE001
         logger.exception("api_species-risk failed: %s", exc)
         raise HTTPException(status_code=500, detail="Species risk analysis failed") from exc
+
+
+@app.get("/api/zones-overview")
+def api_zones_overview():
+    """
+    ML stress snapshot for all four map sectors (used by Ocean Zones page).
+    """
+    try:
+        return zones_overview_payload()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_zones_overview failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Zones overview failed") from exc
+
+
+@app.get("/api/species-threat-scores")
+def api_species_threat_scores():
+    """
+    Per-species threat scores from zone-centered ML + habitat tolerance engine.
+    """
+    try:
+        return species_threat_scores_payload()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_species_threat_scores failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Species threat scores failed") from exc
+
+
+@app.get("/api/download-predictions")
+def api_download_predictions(
+    zone_id: str = Query("all", description="Sector id or 'all'"),
+):
+    """
+    Downloadable JSON bundle of zone predictions and species threat scores.
+    """
+    try:
+        payload = download_predictions_payload(zone_id)
+        filename = f"watchtheblue_predictions_{zone_id}.json"
+        return JSONResponse(
+            content=payload,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api_download_predictions failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Download failed") from exc
 
 
 @app.get("/api/zone-analysis")
